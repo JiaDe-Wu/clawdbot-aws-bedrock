@@ -526,7 +526,7 @@ Resources:
       UserData:
         Fn::Base64: !Sub |
           #!/bin/bash
-          set -e
+          # Remove set -e to prevent script from stopping on errors
           
           exec > >(tee /var/log/clawdbot-setup.log)
           exec 2>&1
@@ -600,9 +600,21 @@ Resources:
           
           # Configure AWS region
           echo "[6/9] Configuring AWS..."
-          REGION=$(curl -s http://169.254.169.254/latest/meta-data/placement/region)
-          sudo -u ubuntu aws configure set region $REGION
-          sudo -u ubuntu aws configure set output json
+          TOKEN_IMDS=$(curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600" 2>/dev/null || echo "")
+          if [ -n "$TOKEN_IMDS" ]; then
+            REGION=$(curl -H "X-aws-ec2-metadata-token: $TOKEN_IMDS" http://169.254.169.254/latest/meta-data/placement/region 2>/dev/null || echo "")
+          else
+            REGION=$(curl -s http://169.254.169.254/latest/meta-data/placement/region 2>/dev/null || echo "")
+          fi
+          
+          # Fallback if metadata service fails
+          if [ -z "$REGION" ]; then
+            REGION="${AWS::Region}"
+          fi
+          
+          echo "Detected region: $REGION"
+          sudo -u ubuntu aws configure set region "$REGION" || echo "AWS configure failed, continuing..."
+          sudo -u ubuntu aws configure set output json || echo "AWS configure failed, continuing..."
           
           # Configure environment variables
           echo "[7/9] Configuring environment variables..."
@@ -627,8 +639,18 @@ Resources:
           GATEWAY_TOKEN=$(openssl rand -hex 24)
           
           # Get AWS region (using IMDSv2)
-          TOKEN=$(curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600")
-          AWS_REGION=$(curl -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/placement/region)
+          TOKEN_IMDS=$(curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600" 2>/dev/null)
+          if [ -n "$TOKEN_IMDS" ]; then
+            AWS_REGION=$(curl -H "X-aws-ec2-metadata-token: $TOKEN_IMDS" http://169.254.169.254/latest/meta-data/placement/region 2>/dev/null)
+            INSTANCE_ID=$(curl -H "X-aws-ec2-metadata-token: $TOKEN_IMDS" http://169.254.169.254/latest/meta-data/instance-id 2>/dev/null)
+          else
+            AWS_REGION=$(curl -s http://169.254.169.254/latest/meta-data/placement/region 2>/dev/null)
+            INSTANCE_ID=$(curl -s http://169.254.169.254/latest/meta-data/instance-id 2>/dev/null)
+          fi
+          
+          # Fallback
+          AWS_REGION=${!AWS_REGION:-"${AWS::Region}"}
+          INSTANCE_ID=${!INSTANCE_ID:-"unknown"}
           
           # Create Bedrock configuration file
           sudo -u ubuntu cat > /home/ubuntu/.clawdbot/clawdbot.json << JSONEOF
@@ -676,7 +698,8 @@ Resources:
           
           # If sandbox enabled, add configuration
           if [ "${EnableSandbox}" == "true" ]; then
-            sudo -u ubuntu python3 -c 'import json; config = json.load(open("/home/ubuntu/.clawdbot/clawdbot.json")); config["agents"]["defaults"]["sandbox"] = {"mode": "non-main", "allowlist": ["bash", "process", "read", "write", "edit"], "denylist": ["browser", "canvas", "nodes", "gateway"]}; json.dump(config, open("/home/ubuntu/.clawdbot/clawdbot.json", "w"), indent=2)'
+            sudo python3 -c 'import json; config = json.load(open("/home/ubuntu/.clawdbot/clawdbot.json")); config["agents"]["defaults"]["sandbox"] = {"mode": "non-main", "allowlist": ["bash", "process", "read", "write", "edit"], "denylist": ["browser", "canvas", "nodes", "gateway"]}; json.dump(config, open("/home/ubuntu/.clawdbot/clawdbot.json", "w"), indent=2)'
+            sudo chown ubuntu:ubuntu /home/ubuntu/.clawdbot/clawdbot.json
           fi
           
           # Install daemon
@@ -745,89 +768,55 @@ Resources:
           echo "[9/9] Complete!"
           echo "SUCCESS" > /home/ubuntu/.clawdbot/setup_status.txt
           echo "Setup completed: $(date)" >> /home/ubuntu/.clawdbot/setup_status.txt
+          echo "Token: $GATEWAY_TOKEN" >> /home/ubuntu/.clawdbot/setup_status.txt
           
-          # Signal CloudFormation with token and instance info (using curl)
-          SIGNAL_DATA="{\"Status\":\"SUCCESS\",\"Reason\":\"Clawdbot installation complete\",\"UniqueId\":\"$INSTANCE_ID\",\"Data\":\"{\\\"token\\\":\\\"$GATEWAY_TOKEN\\\",\\\"instanceId\\\":\\\"$INSTANCE_ID\\\",\\\"region\\\":\\\"$AWS_REGION\\\",\\\"accessUrl\\\":\\\"http://localhost:18789/?token=$GATEWAY_TOKEN\\\"}\"}"
+          # Signal CloudFormation (using curl, always execute)
+          echo "[9/9] Signaling CloudFormation..."
+          SIGNAL_DATA="{\"Status\":\"SUCCESS\",\"Reason\":\"Clawdbot ready\",\"UniqueId\":\"$INSTANCE_ID\",\"Data\":\"$GATEWAY_TOKEN\"}"
           
-          curl -X PUT -H 'Content-Type:' \
-            --data-binary "$SIGNAL_DATA" \
-            '${ClawdbotWaitHandle}' || echo "Failed to signal CloudFormation"
+          curl -X PUT -H 'Content-Type:' --data-binary "$SIGNAL_DATA" '${ClawdbotWaitHandle}' \
+            && echo "Signal sent successfully" \
+            || echo "Signal failed, but Clawdbot is running"
           
           echo "=========================================="
           echo "Clawdbot installation complete!"
-          echo "Access via SSM Session Manager"
+          echo "Token: $GATEWAY_TOKEN"
           echo "=========================================="
       Tags:
         - Key: Name
           Value: !Sub "${AWS::StackName}-instance"
 
 Outputs:
-  InstanceId:
-    Description: "EC2 Instance ID"
-    Value: !Ref ClawdbotInstance
-    Export:
-      Name: !Sub "${AWS::StackName}-InstanceId"
+  Step1InstallSSMPlugin:
+    Description: "STEP 1: Install SSM Session Manager Plugin on your local computer"
+    Value: "https://docs.aws.amazon.com/systems-manager/latest/userguide/session-manager-working-with-install-plugin.html"
 
-  SSMSessionCommand:
-    Description: "SSM Session Manager connection command"
-    Value: !Sub "aws ssm start-session --target ${ClawdbotInstance} --region ${AWS::Region}"
-
-  GatewayToken:
-    Description: "Gateway Token (from WaitCondition)"
-    Value: !GetAtt ClawdbotWaitCondition.Data
-
-  SSMPortForwardCommand:
-    Description: "STEP 1: Run on LOCAL computer (keep terminal open)"
+  Step2PortForwarding:
+    Description: "STEP 2: Run this command on LOCAL computer (keep terminal open)"
     Value: !Sub |
       aws ssm start-session --target ${ClawdbotInstance} --region ${AWS::Region} --document-name AWS-StartPortForwardingSession --parameters '{"portNumber":["18789"],"localPortNumber":["18789"]}'
 
-  CompleteAccessURL:
-    Description: "STEP 2: Open this URL in browser (token included)"
+  Step3AccessURL:
+    Description: "STEP 3: Click or copy this URL to browser"
+    Value: !Sub 
+      - "http://localhost:18789/?token=${Token}"
+      - Token: !GetAtt ClawdbotWaitCondition.Data
+
+  Step4StartChatting:
+    Description: "STEP 4: Start chatting with Clawdbot!"
+    Value: "Connect WhatsApp, Telegram, Discord in Web UI. See README: https://github.com/JiaDe-Wu/clawdbot-aws-bedrock"
+
+  GatewayToken:
+    Description: "Gateway Token (for reference)"
     Value: !GetAtt ClawdbotWaitCondition.Data
+
+  InstanceId:
+    Description: "EC2 Instance ID"
+    Value: !Ref ClawdbotInstance
 
   BedrockModel:
     Description: "Bedrock model in use"
     Value: !Ref ClawdbotModel
-
-  PrecheckStatus:
-    Description: "Pre-check status"
-    Value: !If [RunPrecheck, "Pre-check completed", "Pre-check skipped"]
-    Condition: RunPrecheck
-
-  VPCEndpointsCreated:
-    Description: "VPC endpoints status"
-    Value: !If [CreateEndpoints, "VPC endpoints created (private network)", "VPC endpoints not created (public internet)"]
-
-  SecurityNote:
-    Description: "Security configuration"
-    Value: "Uses IAM authentication for Bedrock, SSM Session Manager for access, no API keys needed"
-
-  NextSteps:
-    Description: "Complete setup instructions"
-    Value: !Sub |
-      STEP 1: Wait 5-10 minutes for installation to complete
-      
-      STEP 2: Install SSM Session Manager Plugin on your local computer (if not already installed)
-      - macOS: https://docs.aws.amazon.com/systems-manager/latest/userguide/session-manager-working-with-install-plugin.html
-      - Run: session-manager-plugin --version (to verify)
-      
-      STEP 3: Start port forwarding (run on your LOCAL computer, keep terminal open)
-      aws ssm start-session \
-        --target ${ClawdbotInstance} \
-        --region ${AWS::Region} \
-        --document-name AWS-StartPortForwardingSession \
-        --parameters '{"portNumber":["18789"],"localPortNumber":["18789"]}'
-      
-      STEP 4: Get Gateway Token (open NEW terminal)
-      aws ssm start-session --target ${ClawdbotInstance} --region ${AWS::Region}
-      Then run: sudo su - ubuntu && cat ~/.clawdbot/gateway_token.txt
-      Copy the token (48-character hex string)
-      
-      STEP 5: Open in browser
-      http://localhost:18789/?token=<paste-your-token-here>
-      
-      STEP 6: Connect messaging platforms (WhatsApp, Telegram, Discord, etc.)
-      See README for detailed instructions: https://github.com/JiaDe-Wu/clawdbot-aws-bedrock
 
   MonthlyCost:
     Description: "Estimated monthly cost (USD)"
