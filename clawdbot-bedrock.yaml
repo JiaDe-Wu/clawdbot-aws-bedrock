@@ -24,10 +24,11 @@ Metadata:
 Parameters:
   ClawdbotModel:
     Type: String
-    Default: "us.anthropic.claude-sonnet-4-20250514-v1:0"
+    Default: "global.anthropic.claude-sonnet-4-5-20250929-v1:0"
     Description: "Bedrock model ID"
     AllowedValues:
-      - "us.anthropic.claude-sonnet-4-20250514-v1:0"
+      - "global.anthropic.claude-sonnet-4-5-20250929-v1:0"
+      - "anthropic.claude-sonnet-4-20250514-v1:0"
       - "anthropic.claude-3-5-sonnet-20241022-v2:0"
       - "anthropic.claude-opus-4-20250514"
       - "us.amazon.nova-pro-v1:0"
@@ -84,12 +85,22 @@ Mappings:
   RegionMap:
     us-east-1:
       AMI: "ami-0c7217cdde317cfec"
+    us-east-2:
+      AMI: "ami-0ea3c35c5c3284d82"
+    us-west-1:
+      AMI: "ami-0ce2cb35386fc22e9"
     us-west-2:
       AMI: "ami-0aff18ec83b58762f"
     eu-west-1:
       AMI: "ami-0e9085e60087ce171"
+    eu-central-1:
+      AMI: "ami-0084a47cc718c111a"
+    ap-southeast-1:
+      AMI: "ami-0497a974f8d5dcef8"
     ap-northeast-1:
       AMI: "ami-0d52744d6551d851e"
+    ap-south-1:
+      AMI: "ami-0dee22c13ea7a9a67"
 
 Resources:
   # ==================== Pre-Check Lambda ====================
