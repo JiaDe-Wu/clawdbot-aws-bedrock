@@ -746,9 +746,12 @@ Resources:
           echo "SUCCESS" > /home/ubuntu/.clawdbot/setup_status.txt
           echo "Setup completed: $(date)" >> /home/ubuntu/.clawdbot/setup_status.txt
           
-          # Signal CloudFormation with token and instance info
-          SIGNAL_DATA="{\"token\":\"$GATEWAY_TOKEN\",\"instanceId\":\"$INSTANCE_ID\",\"region\":\"$AWS_REGION\",\"accessUrl\":\"http://localhost:18789/?token=$GATEWAY_TOKEN\"}"
-          /opt/aws/bin/cfn-signal -e 0 -d "$SIGNAL_DATA" -r "Clawdbot installation complete" '${ClawdbotWaitHandle}'
+          # Signal CloudFormation with token and instance info (using curl)
+          SIGNAL_DATA="{\"Status\":\"SUCCESS\",\"Reason\":\"Clawdbot installation complete\",\"UniqueId\":\"$INSTANCE_ID\",\"Data\":\"{\\\"token\\\":\\\"$GATEWAY_TOKEN\\\",\\\"instanceId\\\":\\\"$INSTANCE_ID\\\",\\\"region\\\":\\\"$AWS_REGION\\\",\\\"accessUrl\\\":\\\"http://localhost:18789/?token=$GATEWAY_TOKEN\\\"}\"}"
+          
+          curl -X PUT -H 'Content-Type:' \
+            --data-binary "$SIGNAL_DATA" \
+            '${ClawdbotWaitHandle}' || echo "Failed to signal CloudFormation"
           
           echo "=========================================="
           echo "Clawdbot installation complete!"
