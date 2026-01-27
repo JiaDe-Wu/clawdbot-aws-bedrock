@@ -1,0 +1,523 @@
+# Clawdbot on AWS with Bedrock
+
+> Deploy [Clawdbot](https://github.com/clawdbot/clawdbot) on AWS using Amazon Bedrock and native AWS services. Enterprise-ready, secure, one-click deployment.
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![AWS](https://img.shields.io/badge/AWS-Bedrock-orange.svg)](https://aws.amazon.com/bedrock/)
+[![CloudFormation](https://img.shields.io/badge/IaC-CloudFormation-blue.svg)](https://aws.amazon.com/cloudformation/)
+
+## What is This?
+
+[Clawdbot](https://github.com/clawdbot/clawdbot) is an open-source personal AI assistant that connects to WhatsApp, Slack, Discord, and more. This project provides an **AWS-native deployment** using Amazon Bedrock instead of Anthropic API keys.
+
+## Why AWS Native?
+
+| Original Clawdbot | This Project |
+|-------------------|--------------|
+| Anthropic API Key | **Amazon Bedrock + IAM** |
+| Tailscale VPN | **SSM Session Manager** |
+| Manual setup | **CloudFormation (1-click)** |
+| No audit logs | **CloudTrail (automatic)** |
+| Public internet | **VPC Endpoints (private)** |
+
+## Key Benefits
+
+- 🔐 **No API Key Management** - IAM roles handle authentication automatically
+- 🏢 **Enterprise-Ready** - Full CloudTrail audit logs and compliance support
+- 🚀 **One-Click Deploy** - CloudFormation automates everything
+- ✅ **Pre-Deployment Check** - Lambda validates Bedrock access before deployment
+- 🔒 **Secure Access** - SSM Session Manager, no public ports exposed
+- 💰 **Cost Visibility** - Native AWS cost tracking and optimization
+
+## Quick Start
+
+### One-Click Deploy
+
+Click to deploy in your AWS region:
+
+| Region | Launch Stack |
+|--------|--------------|
+| **US East (N. Virginia)** | [![Launch Stack](https://s3.amazonaws.com/cloudformation-examples/cloudformation-launch-stack.png)](https://console.aws.amazon.com/cloudformation/home?region=us-east-1#/stacks/create/review?stackName=clawdbot-bedrock&templateURL=https://raw.githubusercontent.com/your-repo/clawdbot-aws-bedrock/main/cloudformation/clawdbot-bedrock.yaml) |
+| **US West (Oregon)** | [![Launch Stack](https://s3.amazonaws.com/cloudformation-examples/cloudformation-launch-stack.png)](https://console.aws.amazon.com/cloudformation/home?region=us-west-2#/stacks/create/review?stackName=clawdbot-bedrock&templateURL=https://raw.githubusercontent.com/your-repo/clawdbot-aws-bedrock/main/cloudformation/clawdbot-bedrock.yaml) |
+| **EU (Ireland)** | [![Launch Stack](https://s3.amazonaws.com/cloudformation-examples/cloudformation-launch-stack.png)](https://console.aws.amazon.com/cloudformation/home?region=eu-west-1#/stacks/create/review?stackName=clawdbot-bedrock&templateURL=https://raw.githubusercontent.com/your-repo/clawdbot-aws-bedrock/main/cloudformation/clawdbot-bedrock.yaml) |
+| **Asia Pacific (Tokyo)** | [![Launch Stack](https://s3.amazonaws.com/cloudformation-examples/cloudformation-launch-stack.png)](https://console.aws.amazon.com/cloudformation/home?region=ap-northeast-1#/stacks/create/review?stackName=clawdbot-bedrock&templateURL=https://raw.githubusercontent.com/your-repo/clawdbot-aws-bedrock/main/cloudformation/clawdbot-bedrock.yaml) |
+
+> **Before clicking**: 
+> 1. Enable Bedrock models in [Bedrock Console](https://console.aws.amazon.com/bedrock/) (Claude Opus 4, Sonnet 3.5)
+> 2. Create an EC2 key pair in your target region
+> 3. Lambda will automatically validate your Bedrock access during deployment
+
+### Manual Deploy (Alternative)
+
+- AWS account with Bedrock access
+- [AWS CLI](https://aws.amazon.com/cli/) installed
+- [SSM Session Manager Plugin](https://docs.aws.amazon.com/systems-manager/latest/userguide/session-manager-working-with-install-plugin.html) installed
+- EC2 key pair created
+
+### Manual Deploy (Alternative)
+
+**Using helper script**:
+
+```bash
+./scripts/deploy.sh clawdbot-bedrock us-west-2 your-keypair
+```
+
+**Using AWS CLI**:
+
+**Using AWS CLI**:
+
+```bash
+aws cloudformation create-stack \
+  --stack-name clawdbot-bedrock \
+  --template-body file://cloudformation/clawdbot-bedrock.yaml \
+  --parameters ParameterKey=KeyPairName,ParameterValue=your-keypair \
+  --capabilities CAPABILITY_IAM \
+  --region us-west-2
+
+# Wait for completion
+aws cloudformation wait stack-create-complete \
+  --stack-name clawdbot-bedrock \
+  --region us-west-2
+```
+
+> **Note**: Lambda pre-check runs automatically during deployment. If it fails, check CloudFormation events for details.
+
+### Access Clawdbot
+
+```bash
+# Get instance ID
+INSTANCE_ID=$(aws cloudformation describe-stacks \
+  --stack-name clawdbot-bedrock \
+  --query 'Stacks[0].Outputs[?OutputKey==`InstanceId`].OutputValue' \
+  --output text)
+
+# Start port forwarding
+aws ssm start-session \
+  --target $INSTANCE_ID \
+  --document-name AWS-StartPortForwardingSession \
+  --parameters '{"portNumber":["18789"],"localPortNumber":["18789"]}'
+
+# Get token (new terminal)
+aws ssm start-session --target $INSTANCE_ID
+sudo su - ubuntu
+cat ~/.clawdbot/gateway_token.txt
+
+# Open browser
+http://localhost:18789/?token=<your-token>
+```
+
+## How to Use Clawdbot
+
+### Connect Messaging Platforms
+
+#### WhatsApp (Recommended)
+
+1. **In Web UI**: Click "Channels" → "Add Channel" → "WhatsApp"
+2. **Scan QR Code**: Use WhatsApp on your phone
+   - Open WhatsApp → Settings → Linked Devices
+   - Tap "Link a Device"
+   - Scan the QR code displayed
+3. **Verify**: Send a test message to your Clawdbot number
+
+**Tip**: Use a dedicated phone number or enable `selfChatMode` for personal number.
+
+#### Telegram
+
+1. **Create Bot**: Message [@BotFather](https://t.me/botfather)
+   ```
+   /newbot
+   Choose a name: My Clawdbot
+   Choose a username: my_clawdbot_bot
+   ```
+2. **Copy Token**: BotFather will give you a token like `123456:ABC-DEF...`
+3. **Configure**: In Web UI, add Telegram channel with your bot token
+4. **Test**: Send `/start` to your bot on Telegram
+
+#### Discord
+
+1. **Create Bot**: Visit [Discord Developer Portal](https://discord.com/developers/applications)
+   - Click "New Application"
+   - Go to "Bot" → "Add Bot"
+   - Copy bot token
+   - Enable intents: Message Content, Server Members
+2. **Invite Bot**: Generate invite URL with permissions
+   ```
+   https://discord.com/api/oauth2/authorize?client_id=YOUR_CLIENT_ID&permissions=8&scope=bot
+   ```
+3. **Configure**: In Web UI, add Discord channel with bot token
+4. **Test**: Mention your bot in a Discord channel
+
+#### Slack
+
+1. **Create App**: Visit [Slack API](https://api.slack.com/apps)
+2. **Configure Bot**: Add bot token scopes (chat:write, channels:history)
+3. **Install**: Install app to your workspace
+4. **Configure**: In Web UI, add Slack channel
+5. **Test**: Invite bot to a channel and mention it
+
+### Using Clawdbot
+
+#### Send Messages
+
+**Via WhatsApp/Telegram/Discord**: Just send a message!
+
+```
+You: What's the weather today?
+Clawdbot: Let me check that for you...
+```
+
+**Via CLI**:
+```bash
+# SSH/SSM to instance
+clawdbot message send --to +1234567890 --message "Hello"
+```
+
+#### Chat Commands
+
+Send these in any connected channel:
+
+| Command | Description |
+|---------|-------------|
+| `/status` | Show session status (model, tokens, cost) |
+| `/new` or `/reset` | Start a new conversation |
+| `/think high` | Enable deep thinking mode |
+| `/help` | Show available commands |
+
+#### Voice Messages
+
+**WhatsApp/Telegram**: Send voice notes directly - Clawdbot will transcribe and respond!
+
+#### Browser Control
+
+```
+You: Open google.com and search for "AWS Bedrock"
+Clawdbot: *Opens browser, performs search, returns results*
+```
+
+#### Scheduled Tasks
+
+```
+You: Remind me every day at 9am to check emails
+Clawdbot: *Creates cron job*
+```
+
+### Advanced Features
+
+#### Skills
+
+```bash
+# List available skills
+clawdbot skills list
+
+# Install a skill
+clawdbot skills install voice-generation
+
+# View installed skills
+clawdbot skills installed
+```
+
+#### Custom Prompts
+
+Create `~/clawd/system.md` on the instance:
+
+```markdown
+You are my personal assistant. Be concise and helpful.
+Always respond in a friendly tone.
+```
+
+#### Multi-Agent Routing
+
+Configure different agents for different channels in Web UI.
+
+For detailed guides, visit [Clawdbot Documentation](https://docs.molt.bot/).
+
+## Architecture
+
+```
+Your Computer
+     │
+     │ AWS CLI + SSM Plugin
+     ▼
+SSM Service (AWS Private Network)
+     │
+     │ Port Forwarding
+     ▼
+EC2 Instance (Clawdbot)
+     │
+     │ IAM Role Auth
+     ▼
+Amazon Bedrock (Claude Opus 4.5)
+```
+
+**Key Components**:
+- **EC2 Instance**: Runs Clawdbot gateway and browser control
+- **IAM Role**: Authenticates with Bedrock (no API keys)
+- **SSM Session Manager**: Secure access without public ports
+- **VPC Endpoints**: Private network access to Bedrock
+- **Lambda Pre-Check**: Validates environment before deployment
+
+## Cost Breakdown
+
+### Monthly Infrastructure Cost
+
+| Service | Configuration | Monthly Cost |
+|---------|--------------|--------------|
+| EC2 (t3.medium) | 2 vCPU, 4GB RAM | $30.37 |
+| EBS (gp3) | 30GB | $2.40 |
+| VPC Endpoints | 3 endpoints | $21.60 |
+| Data Transfer | VPC endpoint processing | $5-10 |
+| **Subtotal** | | **$60-65** |
+
+### Bedrock Usage Cost
+
+| Model | Input | Output |
+|-------|-------|--------|
+| Claude Opus 4 | $15/1M tokens | $75/1M tokens |
+| Claude Sonnet 3.5 v2 | $3/1M tokens | $15/1M tokens |
+| Claude Haiku 3 | $0.25/1M tokens | $1.25/1M tokens |
+
+**Example**: 100 conversations/day with Opus 4 ≈ $10-20/month
+
+**Total**: ~$70-85/month for light usage
+
+### Cost Optimization
+
+- Use Sonnet instead of Opus: 80% cheaper
+- Disable VPC endpoints: Save $22/month (less secure)
+- Use Savings Plans: Save 30-40% on EC2
+- Use Spot Instances: Save 70% on EC2 (may be interrupted)
+
+## Configuration
+
+### Supported Models
+
+```yaml
+# In CloudFormation parameters
+ClawdbotModel:
+  - anthropic.claude-3-5-sonnet-20241022-v2:0  # Recommended
+  - anthropic.claude-opus-4-20250514           # Most capable
+  - anthropic.claude-3-haiku-20240307-v1:0     # Fastest/cheapest
+```
+
+### Instance Types
+
+```yaml
+InstanceType:
+  - t3.small   # Light usage, ~$15/month
+  - t3.medium  # Recommended, ~$30/month
+  - t3.large   # Heavy usage, ~$60/month
+```
+
+### VPC Endpoints
+
+```yaml
+CreateVPCEndpoints: true   # Recommended for production
+  # Pros: Private network, more secure, lower latency
+  # Cons: +$22/month
+
+CreateVPCEndpoints: false  # For cost optimization
+  # Pros: Save $22/month
+  # Cons: Traffic goes through public internet
+```
+
+## Security Features
+
+### 1. IAM Role Authentication
+
+No API keys to manage. The EC2 instance uses an IAM role to authenticate with Bedrock:
+
+```json
+{
+  "Effect": "Allow",
+  "Action": [
+    "bedrock:InvokeModel",
+    "bedrock:InvokeModelWithResponseStream"
+  ],
+  "Resource": "*"
+}
+```
+
+### 2. SSM Session Manager
+
+No SSH keys needed. Access via AWS Systems Manager:
+
+- ✅ No public ports (except optional SSH fallback)
+- ✅ Automatic session logging
+- ✅ CloudTrail audit trail
+- ✅ Session timeout controls
+
+### 3. VPC Endpoints
+
+Traffic stays within AWS network:
+
+- ✅ Bedrock API calls don't go through internet
+- ✅ Lower latency
+- ✅ Compliance-friendly
+
+### 4. Docker Sandbox
+
+Non-main sessions run in isolated Docker containers:
+
+```json
+{
+  "sandbox": {
+    "mode": "non-main",
+    "allowlist": ["bash", "read", "write"],
+    "denylist": ["browser", "gateway"]
+  }
+}
+```
+
+## Monitoring & Audit
+
+### CloudTrail Logs
+
+All Bedrock API calls are automatically logged:
+
+```bash
+aws cloudtrail lookup-events \
+  --lookup-attributes AttributeKey=EventName,AttributeValue=InvokeModel \
+  --region us-west-2
+```
+
+### CloudWatch Logs
+
+```bash
+# View setup logs
+aws logs tail /var/log/clawdbot-setup.log --follow
+
+# View SSM session logs
+aws logs tail /aws/ssm/session-logs --follow
+```
+
+### Cost Monitoring
+
+```bash
+# View Bedrock costs
+aws ce get-cost-and-usage \
+  --time-period Start=2026-01-01,End=2026-01-31 \
+  --granularity DAILY \
+  --metrics BlendedCost \
+  --filter '{"Dimensions":{"Key":"SERVICE","Values":["Amazon Bedrock"]}}'
+```
+
+## Troubleshooting
+
+### Pre-Check Failed
+
+```bash
+# View Lambda logs
+aws logs tail /aws/lambda/clawdbot-bedrock-bedrock-precheck --follow
+
+# Common issues:
+# 1. Model not enabled → Enable in Bedrock Console
+# 2. Region not supported → Use us-east-1 or us-west-2
+# 3. Permission denied → Check IAM permissions
+```
+
+### Cannot Connect via SSM
+
+```bash
+# Check SSM agent status
+aws ssm describe-instance-information \
+  --filters "Key=InstanceIds,Values=$INSTANCE_ID"
+
+# Check IAM role
+aws ec2 describe-instances \
+  --instance-ids $INSTANCE_ID \
+  --query 'Reservations[0].Instances[0].IamInstanceProfile'
+```
+
+### Bedrock API Errors
+
+```bash
+# Test Bedrock access
+aws bedrock-runtime invoke-model \
+  --model-id anthropic.claude-3-5-sonnet-20241022-v2:0 \
+  --body '{"anthropic_version":"bedrock-2023-05-31","max_tokens":10,"messages":[{"role":"user","content":"Hi"}]}' \
+  --region us-west-2 \
+  output.txt
+
+# View Clawdbot logs
+journalctl --user -u clawdbot-gateway -n 100
+```
+
+## Project Structure
+
+```
+clawdbot-aws-bedrock/
+├── README.md                          # This file
+├── cloudformation/
+│   └── clawdbot-bedrock.yaml         # Main CloudFormation template
+├── scripts/
+│   ├── bedrock-precheck.sh           # Pre-deployment check script
+│   └── deploy.sh                     # Deployment helper script
+├── lambda/
+│   └── precheck/
+│       ├── index.py                  # Lambda pre-check function
+│       └── requirements.txt          # Python dependencies
+└── docs/
+    ├── DEPLOYMENT.md                 # Detailed deployment guide
+    ├── SECURITY.md                   # Security best practices
+    └── TROUBLESHOOTING.md            # Common issues and solutions
+```
+
+## Comparison with Original Clawdbot
+
+### Original (Anthropic API + Tailscale)
+
+```bash
+# Requires:
+- Anthropic API key (manual management)
+- Tailscale account (third-party service)
+- Manual security configuration
+
+# Cost: ~$40/month + API fees
+```
+
+### This Project (Bedrock + SSM)
+
+```bash
+# Requires:
+- AWS account only
+- IAM authentication (automatic)
+- Native AWS services
+
+# Cost: ~$65/month + Bedrock fees
+# Extra $25/month buys you:
+# - No API key management
+# - Full audit logs
+# - Enterprise compliance
+# - AWS support coverage
+```
+
+## Contributing
+
+Contributions welcome! Please:
+
+1. Fork the repository
+2. Create a feature branch
+3. Submit a pull request
+
+## License
+
+This deployment template is provided as-is. Clawdbot itself is licensed under its original license.
+
+## Resources
+
+- [Clawdbot Official Docs](https://docs.molt.bot/)
+- [Clawdbot GitHub](https://github.com/clawdbot/clawdbot)
+- [Amazon Bedrock Docs](https://docs.aws.amazon.com/bedrock/)
+- [SSM Session Manager](https://docs.aws.amazon.com/systems-manager/latest/userguide/session-manager.html)
+
+## Support
+
+- **Clawdbot Issues**: [GitHub Issues](https://github.com/clawdbot/clawdbot/issues)
+- **AWS Bedrock**: [AWS re:Post](https://repost.aws/tags/bedrock)
+- **This Project**: [GitHub Issues](https://github.com/your-repo/clawdbot-aws-bedrock/issues)
+
+---
+
+**Made with ❤️ for AWS customers**
+
+Deploy your personal AI assistant on AWS infrastructure you control.

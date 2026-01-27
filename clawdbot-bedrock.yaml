@@ -1,0 +1,649 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Clawdbot - AWS Native Deployment (Bedrock + SSM + VPC Endpoints)'
+
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: "基础配置"
+        Parameters:
+          - ClawdbotModel
+          - InstanceType
+          - KeyPairName
+      - Label:
+          default: "网络配置"
+        Parameters:
+          - CreateVPCEndpoints
+          - AllowedSSHCIDR
+      - Label:
+          default: "高级配置"
+        Parameters:
+          - EnableSandbox
+          - AutoEnableBedrock
+
+Parameters:
+  ClawdbotModel:
+    Type: String
+    Default: "anthropic.claude-3-5-sonnet-20241022-v2:0"
+    Description: "Bedrock 模型 ID"
+    AllowedValues:
+      - "anthropic.claude-3-5-sonnet-20241022-v2:0"
+      - "anthropic.claude-opus-4-20250514"
+      - "anthropic.claude-3-haiku-20240307-v1:0"
+
+  InstanceType:
+    Type: String
+    Default: "t3.medium"
+    AllowedValues:
+      - "t3.small"
+      - "t3.medium"
+      - "t3.large"
+      - "t3.xlarge"
+
+  KeyPairName:
+    Type: AWS::EC2::KeyPair::KeyName
+    Description: "EC2 密钥对（用于紧急 SSH 访问）"
+
+  AllowedSSHCIDR:
+    Type: String
+    Default: "0.0.0.0/0"
+    Description: "允许 SSH 的 CIDR（推荐使用 SSM Session Manager，可设为 127.0.0.1/32 禁用 SSH）"
+
+  CreateVPCEndpoints:
+    Type: String
+    Default: "true"
+    Description: "创建 VPC 端点（用于私有网络访问 Bedrock 和 SSM）"
+    AllowedValues:
+      - "true"
+      - "false"
+
+  EnableSandbox:
+    Type: String
+    Default: "true"
+    AllowedValues:
+      - "true"
+      - "false"
+
+  AutoEnableBedrock:
+    Type: String
+    Default: "true"
+    Description: "自动运行预检查并尝试启用 Bedrock 模型"
+    AllowedValues:
+      - "true"
+      - "false"
+
+Conditions:
+  CreateEndpoints: !Equals [!Ref CreateVPCEndpoints, "true"]
+  AllowSSH: !Not [!Equals [!Ref AllowedSSHCIDR, "127.0.0.1/32"]]
+  RunPrecheck: !Equals [!Ref AutoEnableBedrock, "true"]
+
+Mappings:
+  RegionMap:
+    us-east-1:
+      AMI: "ami-0c7217cdde317cfec"
+    us-west-2:
+      AMI: "ami-0aff18ec83b58762f"
+    eu-west-1:
+      AMI: "ami-0e9085e60087ce171"
+    ap-northeast-1:
+      AMI: "ami-0d52744d6551d851e"
+
+Resources:
+  # ==================== 预检查 Lambda ====================
+  PrecheckLambdaRole:
+    Type: AWS::IAM::Role
+    Condition: RunPrecheck
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: 'sts:AssumeRole'
+      ManagedPolicyArns:
+        - 'arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole'
+      Policies:
+        - PolicyName: BedrockPrecheckPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'bedrock:ListFoundationModels'
+                  - 'bedrock:GetFoundationModel'
+                  - 'bedrock:InvokeModel'
+                  - 'bedrock-runtime:InvokeModel'
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - 'ec2:DescribeVpcEndpoints'
+                  - 'servicequotas:GetServiceQuota'
+                  - 'sts:GetCallerIdentity'
+                Resource: '*'
+
+  PrecheckLambdaFunction:
+    Type: AWS::Lambda::Function
+    Condition: RunPrecheck
+    Properties:
+      FunctionName: !Sub '${AWS::StackName}-bedrock-precheck'
+      Runtime: python3.12
+      Handler: index.lambda_handler
+      Role: !GetAtt PrecheckLambdaRole.Arn
+      Timeout: 300
+      Code:
+        ZipFile: |
+          import json
+          import boto3
+          import logging
+          from botocore.exceptions import ClientError
+          
+          logger = logging.getLogger()
+          logger.setLevel(logging.INFO)
+          
+          def lambda_handler(event, context):
+              results = {
+                  'status': 'SUCCESS',
+                  'checks': {},
+                  'errors': []
+              }
+              
+              bedrock = boto3.client('bedrock')
+              bedrock_runtime = boto3.client('bedrock-runtime')
+              
+              # 检查模型
+              model_id = event.get('modelId', 'anthropic.claude-3-5-sonnet-20241022-v2:0')
+              
+              try:
+                  # 列出模型
+                  response = bedrock.list_foundation_models(byProvider='Anthropic')
+                  models = {m['modelId']: m for m in response.get('modelSummaries', [])}
+                  
+                  if model_id in models:
+                      results['checks']['model_found'] = True
+                      results['checks']['model_status'] = models[model_id].get('modelLifecycle', {}).get('status')
+                  else:
+                      results['checks']['model_found'] = False
+                      results['errors'].append(f'Model {model_id} not found')
+                  
+                  # 测试调用
+                  try:
+                      test_body = json.dumps({
+                          "anthropic_version": "bedrock-2023-05-31",
+                          "max_tokens": 10,
+                          "messages": [{"role": "user", "content": "Hi"}]
+                      })
+                      
+                      response = bedrock_runtime.invoke_model(
+                          modelId=model_id,
+                          body=test_body
+                      )
+                      results['checks']['model_invocation'] = 'SUCCESS'
+                  except ClientError as e:
+                      results['checks']['model_invocation'] = 'FAILED'
+                      results['errors'].append(f'Model invocation failed: {str(e)}')
+                      results['status'] = 'FAILED'
+                  
+              except Exception as e:
+                  results['status'] = 'ERROR'
+                  results['errors'].append(str(e))
+              
+              return {
+                  'statusCode': 200,
+                  'body': json.dumps(results)
+              }
+
+  PrecheckInvocation:
+    Type: Custom::PrecheckInvocation
+    Condition: RunPrecheck
+    Properties:
+      ServiceToken: !GetAtt PrecheckLambdaFunction.Arn
+      ModelId: !Ref ClawdbotModel
+
+  # ==================== VPC 和网络 ====================
+  ClawdbotVPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: "10.0.0.0/16"
+      EnableDnsHostnames: true
+      EnableDnsSupport: true
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-vpc"
+
+  ClawdbotInternetGateway:
+    Type: AWS::EC2::InternetGateway
+
+  AttachGateway:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref ClawdbotVPC
+      InternetGatewayId: !Ref ClawdbotInternetGateway
+
+  PublicSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref ClawdbotVPC
+      CidrBlock: "10.0.1.0/24"
+      MapPublicIpOnLaunch: true
+      AvailabilityZone: !Select [0, !GetAZs '']
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-public-subnet"
+
+  PrivateSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref ClawdbotVPC
+      CidrBlock: "10.0.2.0/24"
+      AvailabilityZone: !Select [0, !GetAZs '']
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-private-subnet"
+
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref ClawdbotVPC
+
+  PublicRoute:
+    Type: AWS::EC2::Route
+    DependsOn: AttachGateway
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: "0.0.0.0/0"
+      GatewayId: !Ref ClawdbotInternetGateway
+
+  SubnetRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnet
+      RouteTableId: !Ref PublicRouteTable
+
+  # VPC 端点安全组
+  VPCEndpointSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Condition: CreateEndpoints
+    Properties:
+      GroupDescription: "Security group for VPC endpoints"
+      VpcId: !Ref ClawdbotVPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          SourceSecurityGroupId: !Ref ClawdbotSecurityGroup
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-vpce-sg"
+
+  # Bedrock Runtime VPC 端点
+  BedrockRuntimeVPCEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Condition: CreateEndpoints
+    Properties:
+      VpcId: !Ref ClawdbotVPC
+      ServiceName: !Sub 'com.amazonaws.${AWS::Region}.bedrock-runtime'
+      VpcEndpointType: Interface
+      PrivateDnsEnabled: true
+      SubnetIds:
+        - !Ref PrivateSubnet
+      SecurityGroupIds:
+        - !Ref VPCEndpointSecurityGroup
+
+  # SSM VPC 端点（用于 Session Manager）
+  SSMVPCEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Condition: CreateEndpoints
+    Properties:
+      VpcId: !Ref ClawdbotVPC
+      ServiceName: !Sub 'com.amazonaws.${AWS::Region}.ssm'
+      VpcEndpointType: Interface
+      PrivateDnsEnabled: true
+      SubnetIds:
+        - !Ref PrivateSubnet
+      SecurityGroupIds:
+        - !Ref VPCEndpointSecurityGroup
+
+  SSMMessagesVPCEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Condition: CreateEndpoints
+    Properties:
+      VpcId: !Ref ClawdbotVPC
+      ServiceName: !Sub 'com.amazonaws.${AWS::Region}.ssmmessages'
+      VpcEndpointType: Interface
+      PrivateDnsEnabled: true
+      SubnetIds:
+        - !Ref PrivateSubnet
+      SecurityGroupIds:
+        - !Ref VPCEndpointSecurityGroup
+
+  EC2MessagesVPCEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Condition: CreateEndpoints
+    Properties:
+      VpcId: !Ref ClawdbotVPC
+      ServiceName: !Sub 'com.amazonaws.${AWS::Region}.ec2messages'
+      VpcEndpointType: Interface
+      PrivateDnsEnabled: true
+      SubnetIds:
+        - !Ref PrivateSubnet
+      SecurityGroupIds:
+        - !Ref VPCEndpointSecurityGroup
+
+  # ==================== IAM 角色 ====================
+  ClawdbotInstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: 'sts:AssumeRole'
+      ManagedPolicyArns:
+        - 'arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore'
+        - 'arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy'
+      Policies:
+        - PolicyName: BedrockAccessPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'bedrock:InvokeModel'
+                  - 'bedrock:InvokeModelWithResponseStream'
+                  - 'bedrock:ListFoundationModels'
+                  - 'bedrock:GetFoundationModel'
+                Resource: '*'
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-instance-role"
+
+  ClawdbotInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles:
+        - !Ref ClawdbotInstanceRole
+
+  # ==================== 安全组 ====================
+  ClawdbotSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: "Clawdbot instance security group"
+      VpcId: !Ref ClawdbotVPC
+      SecurityGroupIngress:
+        - !If
+          - AllowSSH
+          - IpProtocol: tcp
+            FromPort: 22
+            ToPort: 22
+            CidrIp: !Ref AllowedSSHCIDR
+            Description: "SSH access (fallback)"
+          - !Ref AWS::NoValue
+      SecurityGroupEgress:
+        - IpProtocol: -1
+          CidrIp: "0.0.0.0/0"
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-sg"
+
+  # ==================== EC2 实例 ====================
+  ClawdbotInstance:
+    Type: AWS::EC2::Instance
+    DependsOn:
+      - !If [RunPrecheck, PrecheckInvocation, AWS::NoValue]
+    Properties:
+      ImageId: !FindInMap [RegionMap, !Ref "AWS::Region", AMI]
+      InstanceType: !Ref InstanceType
+      KeyName: !Ref KeyPairName
+      IamInstanceProfile: !Ref ClawdbotInstanceProfile
+      NetworkInterfaces:
+        - AssociatePublicIpAddress: true
+          DeviceIndex: 0
+          GroupSet:
+            - !Ref ClawdbotSecurityGroup
+          SubnetId: !Ref PublicSubnet
+      BlockDeviceMappings:
+        - DeviceName: /dev/sda1
+          Ebs:
+            VolumeSize: 30
+            VolumeType: gp3
+            DeleteOnTermination: true
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          set -e
+          
+          exec > >(tee /var/log/clawdbot-setup.log)
+          exec 2>&1
+          
+          echo "=========================================="
+          echo "Clawdbot AWS Native Setup: $(date)"
+          echo "=========================================="
+          
+          export DEBIAN_FRONTEND=noninteractive
+          
+          # 系统更新
+          echo "[1/9] 更新系统..."
+          apt-get update
+          apt-get upgrade -y
+          
+          # 安装 AWS CLI v2
+          echo "[2/9] 安装 AWS CLI..."
+          curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+          unzip -q awscliv2.zip
+          ./aws/install
+          rm -rf aws awscliv2.zip
+          
+          # 安装 SSM Agent（通常已预装）
+          echo "[3/9] 配置 SSM Agent..."
+          snap start amazon-ssm-agent || systemctl start amazon-ssm-agent
+          
+          # 安装 Docker
+          echo "[4/9] 安装 Docker..."
+          curl -fsSL https://get.docker.com | sh
+          systemctl enable docker
+          systemctl start docker
+          usermod -aG docker ubuntu
+          
+          # 安装 Node.js
+          echo "[5/9] 安装 Node.js..."
+          sudo -u ubuntu bash << 'UBUNTU_SCRIPT'
+          set -e
+          cd ~
+          
+          curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash
+          export NVM_DIR="$HOME/.nvm"
+          [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
+          
+          nvm install 22
+          nvm use 22
+          nvm alias default 22
+          npm install -g clawdbot@latest
+          
+          if ! grep -q 'NVM_DIR' ~/.bashrc; then
+              echo 'export NVM_DIR="$HOME/.nvm"' >> ~/.bashrc
+              echo '[ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"' >> ~/.bashrc
+          fi
+          UBUNTU_SCRIPT
+          
+          # 配置 AWS 区域
+          echo "[6/9] 配置 AWS..."
+          REGION=$(curl -s http://169.254.169.254/latest/meta-data/placement/region)
+          sudo -u ubuntu aws configure set region $REGION
+          sudo -u ubuntu aws configure set output json
+          
+          # 配置环境变量
+          echo "[7/9] 配置环境变量..."
+          cat >> /home/ubuntu/.bashrc << 'EOF'
+          export AWS_REGION=$(curl -s http://169.254.169.254/latest/meta-data/placement/region)
+          export CLAWDBOT_MODEL="${ClawdbotModel}"
+          export CLAWDBOT_USE_BEDROCK=true
+          EOF
+          
+          # 启用 systemd linger
+          loginctl enable-linger ubuntu
+          systemctl start user@1000.service
+          
+          # 生成 Gateway Token
+          GATEWAY_TOKEN=$(openssl rand -hex 24)
+          
+          # 运行 Clawdbot onboarding
+          echo "[8/9] 配置 Clawdbot..."
+          sudo -H -u ubuntu bash -c '
+          export HOME=/home/ubuntu
+          export NVM_DIR="$HOME/.nvm"
+          [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
+          export AWS_REGION=$(curl -s http://169.254.169.254/latest/meta-data/placement/region)
+          
+          # 创建配置目录
+          mkdir -p ~/.clawdbot
+          
+          # 创建 Bedrock 配置
+          cat > ~/.clawdbot/clawdbot.json << JSONEOF
+          {
+            "gateway": {
+              "port": 18789,
+              "bind": "loopback",
+              "controlUi": {
+                "enabled": true,
+                "allowInsecureAuth": true
+              },
+              "auth": {
+                "mode": "token",
+                "token": "'$GATEWAY_TOKEN'"
+              }
+            },
+            "agents": {
+              "defaults": {
+                "model": {
+                  "provider": "bedrock",
+                  "model": "${ClawdbotModel}",
+                  "region": "'$AWS_REGION'",
+                  "maxTokens": 8192
+                },
+                "sandbox": {
+                  "mode": "${EnableSandbox}" == "true" ? "non-main" : "off"
+                }
+              }
+            }
+          }
+          JSONEOF
+          
+          # 安装 daemon
+          clawdbot daemon install || echo "Daemon install failed"
+          '
+          
+          # 保存 token
+          echo "$GATEWAY_TOKEN" > /home/ubuntu/.clawdbot/gateway_token.txt
+          chown ubuntu:ubuntu /home/ubuntu/.clawdbot/gateway_token.txt
+          
+          # 创建 SSM 访问脚本
+          cat > /home/ubuntu/ssm-portforward.sh << 'EOF'
+          #!/bin/bash
+          INSTANCE_ID=$(curl -s http://169.254.169.254/latest/meta-data/instance-id)
+          REGION=$(curl -s http://169.254.169.254/latest/meta-data/placement/region)
+          TOKEN=$(cat /home/ubuntu/.clawdbot/gateway_token.txt)
+          
+          echo "=========================================="
+          echo "Clawdbot SSM 端口转发"
+          echo "=========================================="
+          echo ""
+          echo "在本地电脑运行："
+          echo ""
+          echo "aws ssm start-session \\"
+          echo "  --target $INSTANCE_ID \\"
+          echo "  --region $REGION \\"
+          echo "  --document-name AWS-StartPortForwardingSession \\"
+          echo "  --parameters '{\"portNumber\":[\"18789\"],\"localPortNumber\":[\"18789\"]}'"
+          echo ""
+          echo "然后访问："
+          echo "http://localhost:18789/?token=$TOKEN"
+          echo ""
+          echo "=========================================="
+          EOF
+          chmod +x /home/ubuntu/ssm-portforward.sh
+          chown ubuntu:ubuntu /home/ubuntu/ssm-portforward.sh
+          
+          # 完成
+          echo "[9/9] 完成！"
+          echo "SUCCESS" > /home/ubuntu/.clawdbot/setup_status.txt
+          echo "Setup completed: $(date)" >> /home/ubuntu/.clawdbot/setup_status.txt
+          
+          echo "=========================================="
+          echo "Clawdbot 安装完成！"
+          echo "使用 SSM Session Manager 访问"
+          echo "=========================================="
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-instance"
+
+Outputs:
+  InstanceId:
+    Description: "EC2 Instance ID"
+    Value: !Ref ClawdbotInstance
+    Export:
+      Name: !Sub "${AWS::StackName}-InstanceId"
+
+  SSMSessionCommand:
+    Description: "SSM Session Manager 连接命令"
+    Value: !Sub "aws ssm start-session --target ${ClawdbotInstance} --region ${AWS::Region}"
+
+  SSMPortForwardCommand:
+    Description: "SSM 端口转发命令（在本地运行）"
+    Value: !Sub |
+      aws ssm start-session \
+        --target ${ClawdbotInstance} \
+        --region ${AWS::Region} \
+        --document-name AWS-StartPortForwardingSession \
+        --parameters '{"portNumber":["18789"],"localPortNumber":["18789"]}'
+
+  LocalAccessURL:
+    Description: "本地访问地址（建立端口转发后）"
+    Value: "http://localhost:18789/?token=<从实例获取>"
+
+  GetTokenCommand:
+    Description: "获取 Gateway Token（通过 SSM 运行）"
+    Value: !Sub |
+      aws ssm start-session --target ${ClawdbotInstance} --region ${AWS::Region}
+      然后运行: cat /home/ubuntu/.clawdbot/gateway_token.txt
+
+  QuickStartScript:
+    Description: "快速启动脚本（SSM 连接后运行）"
+    Value: "./ssm-portforward.sh"
+
+  BedrockModel:
+    Description: "使用的 Bedrock 模型"
+    Value: !Ref ClawdbotModel
+
+  PrecheckStatus:
+    Description: "预检查状态"
+    Value: !If [RunPrecheck, "已运行预检查", "未运行预检查"]
+    Condition: RunPrecheck
+
+  VPCEndpointsCreated:
+    Description: "VPC 端点状态"
+    Value: !If [CreateEndpoints, "已创建 VPC 端点（私有网络访问）", "未创建 VPC 端点（使用公网）"]
+
+  SecurityNote:
+    Description: "安全说明"
+    Value: "✅ 使用 IAM 认证访问 Bedrock，通过 SSM Session Manager 访问实例，无需 API Key"
+
+  NextSteps:
+    Description: "下一步操作"
+    Value: !Sub |
+      1. 等待 5-10 分钟完成安装
+      2. 确保本地安装了 AWS CLI 和 Session Manager Plugin
+      3. 运行 SSM 端口转发命令
+      4. 访问 http://localhost:18789/?token=<token>
+      5. 开始使用 Clawdbot！
+
+  MonthlyCost:
+    Description: "预估月成本（美元）"
+    Value: !Sub |
+      EC2 (${InstanceType}): ~$30-40
+      EBS (30GB): ~$2.40
+      VPC Endpoints: ${!If [CreateEndpoints, "~$7.20 (每个端点 $0.01/小时)", "$0"]}
+      Bedrock: 按使用量计费
+      总计: ~${!If [CreateEndpoints, "$40-50", "$33-43"]}/月
