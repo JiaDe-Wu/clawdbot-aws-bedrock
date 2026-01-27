@@ -1,0 +1,508 @@
+# Clawdbot AWS Bedrock 部署方案
+
+> 在 AWS 上使用 Amazon Bedrock 部署 [Clawdbot](https://github.com/clawdbot/clawdbot)。企业级、安全、一键部署。
+
+[English](README.md) | 简体中文
+
+## 这是什么？
+
+[Clawdbot](https://github.com/clawdbot/clawdbot) 是一个开源的个人 AI 助手，可以连接 WhatsApp、Slack、Discord 等平台。本项目提供 **AWS 原生部署方案**，使用 Amazon Bedrock 替代 Anthropic API Key。
+
+## 为什么选择 AWS 原生版？
+
+| 原版 Clawdbot | 本项目 |
+|---------------|--------|
+| Anthropic API Key | **Amazon Bedrock + IAM** |
+| Tailscale VPN | **SSM Session Manager** |
+| 手动配置 | **CloudFormation 一键部署** |
+| 无审计日志 | **CloudTrail 自动审计** |
+| 公网访问 | **VPC 端点（私有网络）** |
+
+## 核心优势
+
+- 🔐 **无需管理 API Key** - IAM 角色自动认证
+- 🏢 **企业级** - 完整的 CloudTrail 审计日志和合规支持
+- 🚀 **一键部署** - CloudFormation 自动化所有配置
+- ✅ **部署前检查** - Lambda 自动验证 Bedrock 访问权限
+- 🔒 **安全访问** - SSM Session Manager，无需暴露公网端口
+- 💰 **成本透明** - AWS 原生成本追踪和优化
+
+## 快速开始
+
+### 一键部署
+
+点击按钮在你的 AWS 区域部署：
+
+| 区域 | 部署 |
+|------|------|
+| **美国西部（俄勒冈）** | [![Launch Stack](https://s3.amazonaws.com/cloudformation-examples/cloudformation-launch-stack.png)](https://console.aws.amazon.com/cloudformation/home?region=us-west-2#/stacks/create/review?stackName=clawdbot-bedrock&templateURL=https://sharefile-jiade.s3.cn-northwest-1.amazonaws.com.cn/clawdbot-bedrock.yaml) |
+| **美国东部（弗吉尼亚）** | [![Launch Stack](https://s3.amazonaws.com/cloudformation-examples/cloudformation-launch-stack.png)](https://console.aws.amazon.com/cloudformation/home?region=us-east-1#/stacks/create/review?stackName=clawdbot-bedrock&templateURL=https://sharefile-jiade.s3.cn-northwest-1.amazonaws.com.cn/clawdbot-bedrock.yaml) |
+| **欧洲（爱尔兰）** | [![Launch Stack](https://s3.amazonaws.com/cloudformation-examples/cloudformation-launch-stack.png)](https://console.aws.amazon.com/cloudformation/home?region=eu-west-1#/stacks/create/review?stackName=clawdbot-bedrock&templateURL=https://sharefile-jiade.s3.cn-northwest-1.amazonaws.com.cn/clawdbot-bedrock.yaml) |
+| **亚太（东京）** | [![Launch Stack](https://s3.amazonaws.com/cloudformation-examples/cloudformation-launch-stack.png)](https://console.aws.amazon.com/cloudformation/home?region=ap-northeast-1#/stacks/create/review?stackName=clawdbot-bedrock&templateURL=https://sharefile-jiade.s3.cn-northwest-1.amazonaws.com.cn/clawdbot-bedrock.yaml) |
+
+> **注意**：
+> - **中国区域（北京、宁夏）不支持 Bedrock**，无法部署此方案
+> - 部署前在 [Bedrock Console](https://console.aws.amazon.com/bedrock/) 启用模型
+> - 在目标区域创建 EC2 密钥对
+
+### 手动部署
+
+**下载并上传**：
+
+1. 下载模板：[clawdbot-bedrock.yaml](clawdbot-bedrock.yaml)
+2. 访问 [CloudFormation Console](https://console.aws.amazon.com/cloudformation/)
+3. 上传模板并部署
+
+**使用 AWS CLI**：
+
+```bash
+aws cloudformation create-stack \
+  --stack-name clawdbot-bedrock \
+  --template-body file://clawdbot-bedrock.yaml \
+  --parameters ParameterKey=KeyPairName,ParameterValue=your-keypair \
+  --capabilities CAPABILITY_IAM \
+  --region us-west-2
+
+# 等待完成
+aws cloudformation wait stack-create-complete \
+  --stack-name clawdbot-bedrock \
+  --region us-west-2
+```
+
+> **注意**：Lambda 会在部署时自动运行预检查。如果失败，查看 CloudFormation 事件获取详细信息。
+
+### 访问 Clawdbot
+
+```bash
+# 获取实例 ID
+INSTANCE_ID=$(aws cloudformation describe-stacks \
+  --stack-name clawdbot-bedrock \
+  --query 'Stacks[0].Outputs[?OutputKey==`InstanceId`].OutputValue' \
+  --output text)
+
+# 启动端口转发（保持终端打开）
+aws ssm start-session \
+  --target $INSTANCE_ID \
+  --document-name AWS-StartPortForwardingSession \
+  --parameters '{"portNumber":["18789"],"localPortNumber":["18789"]}'
+
+# 获取 token（新终端）
+aws ssm start-session --target $INSTANCE_ID
+sudo su - ubuntu
+cat ~/.clawdbot/gateway_token.txt
+
+# 在浏览器打开
+http://localhost:18789/?token=<你的token>
+```
+
+## 如何使用 Clawdbot
+
+### 连接消息平台
+
+#### WhatsApp（推荐）
+
+1. 在 Web UI 点击 "Channels" → "Add Channel" → "WhatsApp"
+2. 用手机 WhatsApp 扫描二维码
+   - 打开 WhatsApp → 设置 → 已关联的设备
+   - 点击"关联设备"
+   - 扫描二维码
+3. 发送测试消息
+
+**提示**：建议使用专用手机号，或启用 `selfChatMode`。
+
+#### Telegram
+
+1. 创建 Bot：与 [@BotFather](https://t.me/botfather) 对话
+   ```
+   /newbot
+   选择名称：My Clawdbot
+   选择用户名：my_clawdbot_bot
+   ```
+2. 复制 Bot Token（格式：`123456:ABC-DEF...`）
+3. 在 Web UI 配置 Telegram channel
+4. 测试：向你的 bot 发送 `/start`
+
+#### Discord
+
+1. 创建 Bot：访问 [Discord Developer Portal](https://discord.com/developers/applications)
+   - 点击 "New Application"
+   - 进入 "Bot" → "Add Bot"
+   - 复制 bot token
+   - 启用 intents：Message Content、Server Members
+2. 邀请 Bot：生成邀请链接
+   ```
+   https://discord.com/api/oauth2/authorize?client_id=YOUR_CLIENT_ID&permissions=8&scope=bot
+   ```
+3. 在 Web UI 配置 Discord channel
+4. 测试：在 Discord 频道中 @你的bot
+
+#### Slack
+
+1. 创建 App：访问 [Slack API](https://api.slack.com/apps)
+2. 配置 Bot Token Scopes（chat:write、channels:history）
+3. 安装 App 到工作区
+4. 在 Web UI 配置 Slack channel
+5. 测试：邀请 bot 到频道并 @它
+
+### 使用 Clawdbot
+
+#### 发送消息
+
+**通过 WhatsApp/Telegram/Discord**：直接发送消息！
+
+```
+你：今天天气怎么样？
+Clawdbot：让我帮你查一下...
+```
+
+**通过 CLI**：
+```bash
+# SSH/SSM 连接到实例后
+clawdbot message send --to +1234567890 --message "你好"
+```
+
+#### 聊天命令
+
+在任何连接的频道发送：
+
+| 命令 | 说明 |
+|------|------|
+| `/status` | 显示会话状态（模型、tokens、成本） |
+| `/new` 或 `/reset` | 开始新对话 |
+| `/think high` | 启用深度思考模式 |
+| `/help` | 显示可用命令 |
+
+#### 语音消息
+
+**WhatsApp/Telegram**：直接发送语音消息 - Clawdbot 会转录并回复！
+
+#### 浏览器控制
+
+```
+你：打开 google.com 搜索"AWS Bedrock"
+Clawdbot：*打开浏览器，执行搜索，返回结果*
+```
+
+#### 定时任务
+
+```
+你：每天早上9点提醒我查看邮件
+Clawdbot：*创建 cron 任务*
+```
+
+### 高级功能
+
+#### 安装技能
+
+```bash
+# 列出可用技能
+clawdbot skills list
+
+# 安装技能
+clawdbot skills install voice-generation
+
+# 查看已安装技能
+clawdbot skills installed
+```
+
+#### 自定义提示词
+
+在实例上创建 `~/clawd/system.md`：
+
+```markdown
+你是我的个人助手。请简洁且有帮助。
+始终以友好的语气回复。
+```
+
+详细指南请访问 [Clawdbot 文档](https://docs.molt.bot/)。
+
+## 架构
+
+```
+你的电脑
+     │
+     │ AWS CLI + SSM Plugin
+     ▼
+SSM Service（AWS 私有网络）
+     │
+     │ 端口转发
+     ▼
+EC2 实例（Clawdbot）
+     │
+     │ IAM Role 认证
+     ▼
+Amazon Bedrock（Claude Sonnet 4）
+```
+
+**核心组件**：
+- **EC2 实例**：运行 Clawdbot gateway 和浏览器控制
+- **IAM Role**：与 Bedrock 认证（无需 API Key）
+- **SSM Session Manager**：安全访问，无需公网端口
+- **VPC 端点**：私有网络访问 Bedrock
+- **Lambda 预检查**：部署前验证环境
+
+## 成本
+
+### 月度基础设施成本
+
+| 服务 | 成本 |
+|------|------|
+| EC2 (t3.medium) | $30 |
+| EBS (30GB) | $2.40 |
+| VPC 端点 (3个) | $22 |
+| 数据传输 | $5-10 |
+| **小计** | **$60-65** |
+
+### Bedrock 使用成本（按量付费）
+
+| 模型 | 输入 | 输出 |
+|------|------|------|
+| Claude Sonnet 4 | $3/百万 tokens | $15/百万 tokens |
+| Claude Opus 4 | $15/百万 tokens | $75/百万 tokens |
+| Nova Pro | $0.80/百万 tokens | $3.20/百万 tokens |
+
+**示例**：每天 100 次对话 ≈ $10-20/月
+
+**总计**：轻度使用约 $70-85/月
+
+### 成本优化
+
+- 使用 Nova Pro：比 Claude 便宜 70%
+- 禁用 VPC 端点：节省 $22/月（安全性降低）
+- 使用 Savings Plans：EC2 节省 30-40%
+
+## 配置
+
+### 支持的模型
+
+```yaml
+ClawdbotModel:
+  - us.anthropic.claude-sonnet-4-20250514-v1:0  # 默认，推荐
+  - us.amazon.nova-pro-v1:0                     # 最便宜
+  - anthropic.claude-opus-4-20250514            # 最强大
+  - anthropic.claude-3-5-sonnet-20241022-v2:0   # 稳定版
+```
+
+### 实例类型
+
+```yaml
+InstanceType:
+  - t3.small   # $15/月 - 轻度使用
+  - t3.medium  # $30/月 - 推荐
+  - c5.xlarge  # $120/月 - 高性能
+```
+
+### VPC 端点
+
+```yaml
+CreateVPCEndpoints: true   # 生产环境推荐
+  # 优点：私有网络，安全，合规
+  # 缺点：+$22/月
+
+CreateVPCEndpoints: false  # 成本优化
+  # 优点：节省 $22/月
+  # 缺点：流量经过公网
+```
+
+## 文档
+
+- [部署指南](DEPLOYMENT.md) - 详细安装说明
+- [安全最佳实践](SECURITY.md) - 安全配置
+- [故障排查](TROUBLESHOOTING.md) - 常见问题解决
+
+## 项目文件
+
+```
+clawdbot-aws-bedrock/
+├── README.md                    主文档（英文）
+├── README_CN.md                 主文档（中文）
+├── clawdbot-bedrock.yaml        CloudFormation 模板
+├── deploy.sh                    部署脚本
+├── index.py                     Lambda 预检查函数
+├── DEPLOYMENT.md                部署指南
+├── SECURITY.md                  安全实践
+├── TROUBLESHOOTING.md           故障排查
+└── ...
+```
+
+## 安全特性
+
+### 1. IAM Role 认证
+
+无需 API Key。EC2 实例使用 IAM 角色与 Bedrock 认证：
+
+```json
+{
+  "Effect": "Allow",
+  "Action": [
+    "bedrock:InvokeModel",
+    "bedrock:InvokeModelWithResponseStream"
+  ],
+  "Resource": "*"
+}
+```
+
+### 2. SSM Session Manager
+
+无需 SSH 密钥。通过 AWS Systems Manager 访问：
+
+- ✅ 无需公网端口（除可选的 SSH 备用）
+- ✅ 自动会话日志
+- ✅ CloudTrail 审计追踪
+- ✅ 会话超时控制
+
+### 3. VPC 端点
+
+流量保持在 AWS 网络内：
+
+- ✅ Bedrock API 调用不经过公网
+- ✅ 更低延迟
+- ✅ 符合合规要求
+
+### 4. Docker 沙箱
+
+非主会话在隔离的 Docker 容器中运行：
+
+```json
+{
+  "sandbox": {
+    "mode": "non-main",
+    "allowlist": ["bash", "read", "write"],
+    "denylist": ["browser", "gateway"]
+  }
+}
+```
+
+## 监控和审计
+
+### CloudTrail 日志
+
+所有 Bedrock API 调用自动记录：
+
+```bash
+aws cloudtrail lookup-events \
+  --lookup-attributes AttributeKey=EventName,AttributeValue=InvokeModel \
+  --region us-west-2
+```
+
+### CloudWatch 日志
+
+```bash
+# 查看安装日志
+aws logs tail /var/log/clawdbot-setup.log --follow
+
+# 查看 SSM 会话日志
+aws logs tail /aws/ssm/session-logs --follow
+```
+
+### 成本监控
+
+```bash
+# 查看 Bedrock 成本
+aws ce get-cost-and-usage \
+  --time-period Start=2026-01-01,End=2026-01-31 \
+  --granularity DAILY \
+  --metrics BlendedCost \
+  --filter '{"Dimensions":{"Key":"SERVICE","Values":["Amazon Bedrock"]}}'
+```
+
+## 故障排查
+
+### 预检查失败
+
+```bash
+# 查看 Lambda 日志
+aws logs tail /aws/lambda/clawdbot-bedrock-bedrock-precheck --follow
+
+# 常见问题：
+# 1. 模型未启用 → 在 Bedrock Console 启用
+# 2. 区域不支持 → 使用 us-east-1 或 us-west-2
+# 3. 权限不足 → 检查 IAM 权限
+```
+
+### 无法通过 SSM 连接
+
+```bash
+# 检查 SSM agent 状态
+aws ssm describe-instance-information \
+  --filters "Key=InstanceIds,Values=$INSTANCE_ID"
+
+# 检查 IAM 角色
+aws ec2 describe-instances \
+  --instance-ids $INSTANCE_ID \
+  --query 'Reservations[0].Instances[0].IamInstanceProfile'
+```
+
+### Bedrock API 错误
+
+```bash
+# 测试 Bedrock 访问
+aws bedrock-runtime invoke-model \
+  --model-id us.anthropic.claude-sonnet-4-20250514-v1:0 \
+  --body '{"anthropic_version":"bedrock-2023-05-31","max_tokens":10,"messages":[{"role":"user","content":"Hi"}]}' \
+  --region us-west-2 \
+  output.txt
+
+# 查看 Clawdbot 日志
+journalctl --user -u clawdbot-gateway -n 100
+```
+
+## 与原版对比
+
+### 原版（Anthropic API + Tailscale）
+
+```bash
+# 需要：
+- Anthropic API key（手动管理）
+- Tailscale 账号（第三方服务）
+- 手动安全配置
+
+# 成本：~$40/月 + API 费用
+```
+
+### 本项目（Bedrock + SSM）
+
+```bash
+# 需要：
+- 仅需 AWS 账号
+- IAM 认证（自动）
+- AWS 原生服务
+
+# 成本：~$65/月 + Bedrock 费用
+# 额外的 $25/月 换来：
+# - 无需管理 API Key
+# - 完整审计日志
+# - 企业合规支持
+# - AWS 技术支持覆盖
+```
+
+## 贡献
+
+欢迎贡献！请：
+
+1. Fork 仓库
+2. 创建 feature 分支
+3. 提交 Pull Request
+
+## 许可证
+
+MIT License。详见 [LICENSE](LICENSE)。
+
+Clawdbot 本身有独立的许可证。参见 [Clawdbot License](https://github.com/clawdbot/clawdbot)。
+
+## 资源
+
+- [Clawdbot 文档](https://docs.molt.bot/)
+- [Clawdbot GitHub](https://github.com/clawdbot/clawdbot)
+- [Amazon Bedrock](https://aws.amazon.com/bedrock/)
+- [SSM Session Manager](https://docs.aws.amazon.com/systems-manager/latest/userguide/session-manager.html)
+
+## 支持
+
+- **Clawdbot**：[GitHub Issues](https://github.com/clawdbot/clawdbot/issues) | [Discord](https://discord.gg/clawdbot)
+- **AWS Bedrock**：[AWS re:Post](https://repost.aws/tags/bedrock)
+- **本项目**：[GitHub Issues](https://github.com/JiaDe-Wu/clawdbot-aws-bedrock/issues)
+
+---
+
+**在你控制的 AWS 基础设施上部署个人 AI 助手** 🦞
