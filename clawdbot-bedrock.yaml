@@ -696,13 +696,7 @@ Resources:
           }
           JSONEOF
           
-          # If sandbox enabled, add configuration
-          if [ "${EnableSandbox}" == "true" ]; then
-            sudo python3 -c 'import json; config = json.load(open("/home/ubuntu/.clawdbot/clawdbot.json")); config["agents"]["defaults"]["sandbox"] = {"mode": "non-main", "allowlist": ["bash", "process", "read", "write", "edit"], "denylist": ["browser", "canvas", "nodes", "gateway"]}; json.dump(config, open("/home/ubuntu/.clawdbot/clawdbot.json", "w"), indent=2)'
-            sudo chown ubuntu:ubuntu /home/ubuntu/.clawdbot/clawdbot.json
-          fi
-          
-          # Install daemon
+          # Install daemon (sandbox config removed - not supported)
           sudo -H -u ubuntu XDG_RUNTIME_DIR=/run/user/1000 bash -c '
           export HOME=/home/ubuntu
           export NVM_DIR="$HOME/.nvm"
@@ -775,20 +769,23 @@ Resources:
           apt-get install -y python3-pip 2>&1 | tee -a /var/log/clawdbot-setup.log
           pip3 install https://s3.amazonaws.com/cloudformation-examples/aws-cfn-bootstrap-py3-latest.tar.gz 2>&1 | tee -a /var/log/clawdbot-setup.log
           
-          # Verify cfn-signal exists
-          if [ ! -f /opt/aws/bin/cfn-signal ]; then
-            echo "ERROR: cfn-signal not found after installation"
-            exit 1
+          # Find cfn-signal location
+          CFN_SIGNAL=$(which cfn-signal 2>/dev/null || find /usr -name cfn-signal 2>/dev/null | head -1)
+          
+          # Create complete URL
+          COMPLETE_URL="http://localhost:18789/?token=$GATEWAY_TOKEN"
+          
+          # Signal CloudFormation
+          if [ -n "$CFN_SIGNAL" ]; then
+            echo "Using cfn-signal: $CFN_SIGNAL"
+            $CFN_SIGNAL -e 0 -d "$COMPLETE_URL" -r "Clawdbot ready" '${ClawdbotWaitHandle}'
+          else
+            echo "cfn-signal not found, using curl"
+            SIGNAL_JSON="{\"Status\":\"SUCCESS\",\"Reason\":\"Clawdbot ready\",\"UniqueId\":\"clawdbot\",\"Data\":\"$COMPLETE_URL\"}"
+            curl -X PUT -H 'Content-Type:' --data-binary "$SIGNAL_JSON" '${ClawdbotWaitHandle}'
           fi
           
-          # Create complete URL (this is what we'll send to CloudFormation)
-          COMPLETE_URL="http://localhost:18789/?token=$GATEWAY_TOKEN"
-          echo "$COMPLETE_URL" > /tmp/access_url.txt
-          
-          # Signal CloudFormation with complete URL
-          /opt/aws/bin/cfn-signal -e 0 -d "$COMPLETE_URL" -r "Clawdbot ready" '${ClawdbotWaitHandle}' \
-            && echo "Signal sent successfully" \
-            || echo "Signal failed"
+          echo "Signal sent successfully"
           
           echo "=========================================="
           echo "Clawdbot installation complete!"
