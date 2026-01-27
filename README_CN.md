@@ -29,9 +29,24 @@
 
 ## 快速开始
 
-### 一键部署
+### ⚡ 一键部署（强烈推荐 - 8 分钟即可使用！）
 
-点击按钮在你的 AWS 区域部署：
+> **为什么选择 CloudFormation？** 全自动配置，无需手动操作。点击按钮，等待 8 分钟，获取 URL 即可使用！
+
+**只需 3 步**：
+1. ✅ 点击下方"部署"按钮
+2. ✅ 在表单中选择 EC2 密钥对
+3. ✅ 等待约 8 分钟 → 查看"输出"标签 → 复制 URL → 开始使用！
+
+**自动完成的操作**：
+- 创建 VPC、子网、安全组
+- 启动 EC2 实例
+- 安装 Node.js、Docker、Clawdbot
+- 配置 Bedrock 集成
+- 生成安全网关令牌
+- 输出可直接使用的 URL
+
+点击部署：
 
 | 区域 | 部署 |
 |------|------|
@@ -39,6 +54,7 @@
 | **美国东部（弗吉尼亚）** | [![Launch Stack](https://s3.amazonaws.com/cloudformation-examples/cloudformation-launch-stack.png)](https://console.aws.amazon.com/cloudformation/home?region=us-east-1#/stacks/create/review?stackName=clawdbot-bedrock&templateURL=https://sharefile-jiade.s3.cn-northwest-1.amazonaws.com.cn/clawdbot-bedrock.yaml) |
 | **欧洲（爱尔兰）** | [![Launch Stack](https://s3.amazonaws.com/cloudformation-examples/cloudformation-launch-stack.png)](https://console.aws.amazon.com/cloudformation/home?region=eu-west-1#/stacks/create/review?stackName=clawdbot-bedrock&templateURL=https://sharefile-jiade.s3.cn-northwest-1.amazonaws.com.cn/clawdbot-bedrock.yaml) |
 | **亚太（东京）** | [![Launch Stack](https://s3.amazonaws.com/cloudformation-examples/cloudformation-launch-stack.png)](https://console.aws.amazon.com/cloudformation/home?region=ap-northeast-1#/stacks/create/review?stackName=clawdbot-bedrock&templateURL=https://sharefile-jiade.s3.cn-northwest-1.amazonaws.com.cn/clawdbot-bedrock.yaml) |
+| **中国区域** 🇨🇳 | 敬请期待（Bedrock 尚未开放） |
 
 > **注意**：
 > - **中国区域（北京、宁夏）不支持 Bedrock**，无法部署此方案
@@ -284,6 +300,54 @@ Amazon Bedrock（Claude Sonnet 4）
 - 使用 Nova Pro：比 Claude 便宜 70%
 - 禁用 VPC 端点：节省 $22/月（安全性降低）
 - 使用 Savings Plans：EC2 节省 30-40%
+
+## 架构与数据流
+
+### 简单聊天示例
+```
+你（WhatsApp）："AWS Bedrock 是什么？"
+     ↓
+EC2（Clawdbot）：接收 → 调用 Bedrock → 获取回复
+     ↓
+你：2-3 秒内收到答案
+
+成本：约 $0.001 | 安全：IAM 认证，私有网络 | 数据：留在 AWS
+```
+
+### 高级功能：视频创建示例
+```
+你："创建一个 10 秒关于 AWS 的视频"
+     ↓
+EC2（Clawdbot）：
+  1. Bedrock 生成脚本（$0.01）
+  2. 调用 Runway API（$0.50，需要你的 API key）
+  3. 下载视频到 /tmp（约 50MB）
+  4. 可选：ffmpeg 处理
+  5. 发送到 WhatsApp
+     ↓
+你：收到视频
+
+总计：$0.51 | 时间：30-60 秒 | 资源：1GB 内存，50MB 磁盘
+```
+
+### 为什么 EC2 安全、可靠、经济？
+
+**🔒 安全性**：
+- 所有数据在你的 AWS 账号（不经过第三方服务器）
+- IAM 认证（无需担心 API Key 泄露）
+- VPC 端点（流量保持在 AWS 私有网络）
+- CloudTrail 审计日志（每次 API 调用都被记录）
+
+**🛡️ 可靠性**：
+- 24/7 可用（即使你的电脑关机）
+- 自动重启（systemd 守护）
+- 多平台同时支持（WhatsApp、Telegram、Discord）
+
+**💰 经济性**：
+- 基础设施：约 $60-65/月（EC2 + VPC 端点）
+- AI 使用：约 $10-50/月（按量付费）
+- 总计：约 $70-115/月
+- 对比：5 人 × ChatGPT Plus（$100/月）vs 1 个 Clawdbot（$70/月）
 
 ## 配置
 

@@ -35,22 +35,32 @@ English | [简体中文](README_CN.md)
 
 ### ⚡ One-Click Deploy (Recommended - 8 minutes to ready!)
 
+> **Why CloudFormation?** Fully automated setup - no manual configuration needed. Just click, wait 8 minutes, and get your ready-to-use URL!
+
 **Just 3 steps**:
-1. Click the "Launch Stack" button for your region
-2. Select your EC2 key pair
-3. Wait 8 minutes → Copy the URL from Outputs → Start using!
+1. ✅ Click "Launch Stack" button below
+2. ✅ Select your EC2 key pair in the form
+3. ✅ Wait ~8 minutes → Check "Outputs" tab → Copy URL → Start using!
+
+**What happens automatically**:
+- Creates VPC, subnets, security groups
+- Launches EC2 instance
+- Installs Node.js, Docker, Clawdbot
+- Configures Bedrock integration
+- Generates secure gateway token
+- Outputs ready-to-use URL with token
 
 Click to deploy:
 
 | Region | Launch Stack |
 |--------|--------------|
-| **China (Ningxia)** 🇨🇳 | [![Launch Stack](https://s3.amazonaws.com/cloudformation-examples/cloudformation-launch-stack.png)](https://console.amazonaws.cn/cloudformation/home?region=cn-northwest-1#/stacks/create/review?stackName=clawdbot-bedrock&templateURL=https://sharefile-jiade.s3.cn-northwest-1.amazonaws.com.cn/clawdbot-bedrock.yaml) |
-| **China (Beijing)** 🇨🇳 | [![Launch Stack](https://s3.amazonaws.com/cloudformation-examples/cloudformation-launch-stack.png)](https://console.amazonaws.cn/cloudformation/home?region=cn-north-1#/stacks/create/review?stackName=clawdbot-bedrock&templateURL=https://sharefile-jiade.s3.cn-northwest-1.amazonaws.com.cn/clawdbot-bedrock.yaml) |
 | **US West (Oregon)** | [![Launch Stack](https://s3.amazonaws.com/cloudformation-examples/cloudformation-launch-stack.png)](https://console.aws.amazon.com/cloudformation/home?region=us-west-2#/stacks/create/review?stackName=clawdbot-bedrock&templateURL=https://sharefile-jiade.s3.cn-northwest-1.amazonaws.com.cn/clawdbot-bedrock.yaml) |
 | **US East (N. Virginia)** | [![Launch Stack](https://s3.amazonaws.com/cloudformation-examples/cloudformation-launch-stack.png)](https://console.aws.amazon.com/cloudformation/home?region=us-east-1#/stacks/create/review?stackName=clawdbot-bedrock&templateURL=https://sharefile-jiade.s3.cn-northwest-1.amazonaws.com.cn/clawdbot-bedrock.yaml) |
+| **EU (Ireland)** | [![Launch Stack](https://s3.amazonaws.com/cloudformation-examples/cloudformation-launch-stack.png)](https://console.aws.amazon.com/cloudformation/home?region=eu-west-1#/stacks/create/review?stackName=clawdbot-bedrock&templateURL=https://sharefile-jiade.s3.cn-northwest-1.amazonaws.com.cn/clawdbot-bedrock.yaml) |
+| **Asia Pacific (Tokyo)** | [![Launch Stack](https://s3.amazonaws.com/cloudformation-examples/cloudformation-launch-stack.png)](https://console.aws.amazon.com/cloudformation/home?region=ap-northeast-1#/stacks/create/review?stackName=clawdbot-bedrock&templateURL=https://sharefile-jiade.s3.cn-northwest-1.amazonaws.com.cn/clawdbot-bedrock.yaml) |
+| **China Regions** 🇨🇳 | Coming soon (Bedrock not yet available) |
 
-> **Note**: 
-> - China regions (🇨🇳) use `console.amazonaws.cn` instead of `.com`
+> **Note**:
 > - Before deploying, enable Bedrock models in Bedrock Console
 > - Create an EC2 key pair in your target region
 > - Lambda will automatically validate Bedrock access during deployment
