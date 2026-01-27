@@ -104,7 +104,7 @@ Mappings:
       AMI: "ami-0dee22c13ea7a9a67"
 
 Resources:
-  # ==================== Wait Condition for Token ====================
+  # ==================== Wait Condition ====================
   ClawdbotWaitHandle:
     Type: AWS::CloudFormation::WaitConditionHandle
 
@@ -770,14 +770,25 @@ Resources:
           echo "Setup completed: $(date)" >> /home/ubuntu/.clawdbot/setup_status.txt
           echo "Token: $GATEWAY_TOKEN" >> /home/ubuntu/.clawdbot/setup_status.txt
           
-          # Signal CloudFormation (using curl, always execute)
-          echo "[9/9] Signaling CloudFormation..."
-          # Send only the token as Data (not JSON)
-          SIGNAL_DATA="{\"Status\":\"SUCCESS\",\"Reason\":\"Clawdbot ready\",\"UniqueId\":\"clawdbot-token\",\"Data\":\"$GATEWAY_TOKEN\"}"
+          # Install cfn-bootstrap tools (for cfn-signal)
+          echo "[9/9] Installing cfn-bootstrap and signaling..."
+          apt-get install -y python3-pip 2>&1 | tee -a /var/log/clawdbot-setup.log
+          pip3 install https://s3.amazonaws.com/cloudformation-examples/aws-cfn-bootstrap-py3-latest.tar.gz 2>&1 | tee -a /var/log/clawdbot-setup.log
           
-          curl -X PUT -H 'Content-Type:' --data-binary "$SIGNAL_DATA" '${ClawdbotWaitHandle}' \
+          # Verify cfn-signal exists
+          if [ ! -f /opt/aws/bin/cfn-signal ]; then
+            echo "ERROR: cfn-signal not found after installation"
+            exit 1
+          fi
+          
+          # Create complete URL (this is what we'll send to CloudFormation)
+          COMPLETE_URL="http://localhost:18789/?token=$GATEWAY_TOKEN"
+          echo "$COMPLETE_URL" > /tmp/access_url.txt
+          
+          # Signal CloudFormation with complete URL
+          /opt/aws/bin/cfn-signal -e 0 -d "$COMPLETE_URL" -r "Clawdbot ready" '${ClawdbotWaitHandle}' \
             && echo "Signal sent successfully" \
-            || echo "Signal failed, but Clawdbot is running"
+            || echo "Signal failed"
           
           echo "=========================================="
           echo "Clawdbot installation complete!"
@@ -798,21 +809,23 @@ Outputs:
       aws ssm start-session --target ${ClawdbotInstance} --region ${AWS::Region} --document-name AWS-StartPortForwardingSession --parameters '{"portNumber":["18789"],"localPortNumber":["18789"]}'
 
   Step3AccessURL:
-    Description: "STEP 3: Click or copy this URL to browser"
-    Value: !Sub 
-      - "http://localhost:18789/?token=${Token}"
-      - Token: !GetAtt ClawdbotWaitCondition.Data
+    Description: "STEP 3: Open this URL in browser"
+    Value: !Select 
+      - 1
+      - !Split 
+        - '":"'
+        - !Select 
+          - 0
+          - !Split 
+            - '"}'
+            - !GetAtt ClawdbotWaitCondition.Data
 
   Step4StartChatting:
-    Description: "STEP 4: Start chatting with Clawdbot!"
-    Value: "Connect WhatsApp, Telegram, Discord in Web UI. See README: https://github.com/JiaDe-Wu/clawdbot-aws-bedrock"
-
-  GatewayToken:
-    Description: "Gateway Token (for reference)"
-    Value: !GetAtt ClawdbotWaitCondition.Data
+    Description: "STEP 4: Start using Clawdbot!"
+    Value: "Connect WhatsApp, Telegram, Discord. See README: https://github.com/JiaDe-Wu/clawdbot-aws-bedrock"
 
   InstanceId:
-    Description: "EC2 Instance ID"
+    Description: "EC2 Instance ID (for reference)"
     Value: !Ref ClawdbotInstance
 
   BedrockModel:
