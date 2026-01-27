@@ -33,9 +33,14 @@ English | [简体中文](README_CN.md)
 
 ## Quick Start
 
-### Quick Deploy
+### ⚡ One-Click Deploy (Recommended - 8 minutes to ready!)
 
-Click to deploy in your AWS region:
+**Just 3 steps**:
+1. Click the "Launch Stack" button for your region
+2. Select your EC2 key pair
+3. Wait 8 minutes → Copy the URL from Outputs → Start using!
+
+Click to deploy:
 
 | Region | Launch Stack |
 |--------|--------------|
@@ -173,6 +178,20 @@ http://localhost:18789/?token=<your-token>
 4. **Configure**: In Web UI, add Slack channel
 5. **Test**: Invite bot to a channel and mention it
 
+#### WeChat / 微信
+
+> **Note**: Clawdbot does NOT officially support WeChat due to WeChat's closed API and restrictions on bot access.
+
+**Alternatives for Chinese users**:
+- Use **WhatsApp** (available in China with VPN)
+- Use **Telegram** (works in China with proxy)
+- Use **Web UI** directly (access via SSM port forwarding)
+
+If you need WeChat integration, consider:
+- Using WeChat Work (企业微信) API (requires enterprise account)
+- Building a custom bridge using WeChat's limited APIs
+- Using third-party WeChat bot frameworks (not officially supported)
+
 ### Using Clawdbot
 
 #### Send Messages
@@ -252,19 +271,47 @@ For detailed guides, visit [Clawdbot Documentation](https://docs.molt.bot/).
 ## Architecture
 
 ```
-Your Computer
-     │
-     │ AWS CLI + SSM Plugin
-     ▼
-SSM Service (AWS Private Network)
-     │
-     │ Port Forwarding
-     ▼
-EC2 Instance (Clawdbot)
-     │
-     │ IAM Role Auth
-     ▼
-Amazon Bedrock (Claude Opus 4.5)
+Your Phone/Computer → WhatsApp/Telegram → EC2 (Clawdbot) → Bedrock (Claude)
+                                              ↓
+                                         Your Data Stays Here
+                                         (Secure, Private, Audited)
+```
+
+### Why EC2 + Bedrock?
+
+**🔒 Security**: All data in your AWS account, IAM authentication, no API keys to leak
+
+**💰 Cost-Effective**: ~$70-115/month total, cheaper than multiple ChatGPT subscriptions for teams
+
+**🛡️ Reliable**: 24/7 availability, auto-restart, CloudWatch monitoring
+
+**📊 Transparent**: CloudTrail logs every API call, Cost Explorer tracks spending
+
+**🌐 Multi-Platform**: One instance serves WhatsApp, Telegram, Discord, Slack simultaneously
+
+### What Runs on EC2
+
+- **Clawdbot Gateway**: Routes messages, manages sessions (~300MB RAM)
+- **Browser Control**: Web automation when needed (~500MB RAM)
+- **Docker Sandbox**: Isolated code execution (secure)
+- **Total Usage**: ~1-2GB of 30GB disk, ~500MB-1GB RAM
+
+### Data Flow Example
+
+```
+You: "Summarize this document"
+  ↓ WhatsApp (public internet)
+EC2: Receives message, authenticates with IAM
+  ↓ VPC Endpoint (private network)
+Bedrock: Claude processes document
+  ↓ VPC Endpoint (private network)
+EC2: Formats response
+  ↓ WhatsApp (public internet)
+You: Receives summary
+
+Cost: ~$0.01 per request
+Time: 2-5 seconds
+Security: All AWS traffic via private network
 ```
 
 **Key Components**:

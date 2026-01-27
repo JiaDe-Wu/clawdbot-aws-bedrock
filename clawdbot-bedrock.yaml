@@ -24,9 +24,10 @@ Metadata:
 Parameters:
   ClawdbotModel:
     Type: String
-    Default: "global.anthropic.claude-sonnet-4-5-20250929-v1:0"
-    Description: "Bedrock model ID"
+    Default: "us.anthropic.claude-sonnet-4-5-20250929-v1:0"
+    Description: "Bedrock model ID (use region-specific prefix: us./eu./apac.)"
     AllowedValues:
+      - "us.anthropic.claude-sonnet-4-5-20250929-v1:0"
       - "global.anthropic.claude-sonnet-4-5-20250929-v1:0"
       - "anthropic.claude-sonnet-4-20250514-v1:0"
       - "anthropic.claude-3-5-sonnet-20241022-v2:0"
@@ -70,7 +71,7 @@ Parameters:
 
   AutoEnableBedrock:
     Type: String
-    Default: "true"
+    Default: "false"
     Description: "Automatically run pre-check and attempt to enable Bedrock models"
     AllowedValues:
       - "true"
@@ -103,6 +104,18 @@ Mappings:
       AMI: "ami-0dee22c13ea7a9a67"
 
 Resources:
+  # ==================== Wait Condition for Token ====================
+  ClawdbotWaitHandle:
+    Type: AWS::CloudFormation::WaitConditionHandle
+
+  ClawdbotWaitCondition:
+    Type: AWS::CloudFormation::WaitCondition
+    DependsOn: ClawdbotInstance
+    Properties:
+      Handle: !Ref ClawdbotWaitHandle
+      Timeout: '900'
+      Count: 1
+
   # ==================== Pre-Check Lambda ====================
   PrecheckLambdaRole:
     Type: AWS::IAM::Role
@@ -218,10 +231,13 @@ Resources:
                       models_response = bedrock.list_foundation_models(byProvider='Anthropic')
                       available_models = {m['modelId']: m for m in models_response.get('modelSummaries', [])}
                       
+                      logger.info(f"Available Anthropic models: {list(available_models.keys())}")
+                      
                       if model_id not in available_models:
                           logger.error(f"✗ Model {model_id} not found")
+                          logger.error(f"Available models: {list(available_models.keys())}")
                           send_response(event, context, 'FAILED',
-                                      {'Error': f'Model {model_id} not found. Check model ID.'})
+                                      {'Error': f'Model {model_id} not found in this region. Available: {", ".join(list(available_models.keys())[:5])}'})
                           return
                       
                       model_status = available_models[model_id].get('modelLifecycle', {}).get('status')
@@ -446,6 +462,15 @@ Resources:
                   - 'bedrock:ListFoundationModels'
                   - 'bedrock:GetFoundationModel'
                 Resource: '*'
+        - PolicyName: SSMParameterPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'ssm:PutParameter'
+                  - 'ssm:GetParameter'
+                Resource: !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/clawdbot/${AWS::StackName}/*'
       Tags:
         - Key: Name
           Value: !Sub "${AWS::StackName}-instance-role"
@@ -481,7 +506,6 @@ Resources:
   # ==================== EC2 Instance ====================
   ClawdbotInstance:
     Type: AWS::EC2::Instance
-    DependsOn: PrecheckLambdaFunction
     Properties:
       ImageId: !FindInMap [RegionMap, !Ref "AWS::Region", AMI]
       InstanceType: !Ref InstanceType
@@ -517,6 +541,7 @@ Resources:
           echo "[1/9] Updating system..."
           apt-get update
           apt-get upgrade -y
+          apt-get install -y unzip curl
           
           # Install AWS CLI v2
           echo "[2/9] Installing AWS CLI..."
@@ -601,13 +626,15 @@ Resources:
           # Generate Gateway Token
           GATEWAY_TOKEN=$(openssl rand -hex 24)
           
-          # Get AWS region
-          AWS_REGION=$(curl -s http://169.254.169.254/latest/meta-data/placement/region)
+          # Get AWS region (using IMDSv2)
+          TOKEN=$(curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600")
+          AWS_REGION=$(curl -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/placement/region)
           
           # Create Bedrock configuration file
           sudo -u ubuntu cat > /home/ubuntu/.clawdbot/clawdbot.json << JSONEOF
           {
             "gateway": {
+              "mode": "local",
               "port": 18789,
               "bind": "loopback",
               "controlUi": {
@@ -664,6 +691,29 @@ Resources:
           echo "$GATEWAY_TOKEN" > /home/ubuntu/.clawdbot/gateway_token.txt
           chown ubuntu:ubuntu /home/ubuntu/.clawdbot/gateway_token.txt
           
+          # Get instance ID and region (using IMDSv2)
+          TOKEN_IMDS=$(curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600")
+          INSTANCE_ID=$(curl -H "X-aws-ec2-metadata-token: $TOKEN_IMDS" http://169.254.169.254/latest/meta-data/instance-id)
+          
+          # Save to SSM Parameter Store (so CloudFormation can retrieve it)
+          STACK_NAME="${AWS::StackName}"
+          aws ssm put-parameter \
+            --name "/clawdbot/$STACK_NAME/gateway-token" \
+            --value "$GATEWAY_TOKEN" \
+            --type "SecureString" \
+            --region $AWS_REGION \
+            --overwrite || echo "Failed to save token to SSM"
+          
+          # Save instance info
+          echo "$INSTANCE_ID" > /home/ubuntu/.clawdbot/instance_id.txt
+          echo "$AWS_REGION" > /home/ubuntu/.clawdbot/region.txt
+          
+          # Create complete access instructions
+          echo "Clawdbot Access Instructions" > /home/ubuntu/ACCESS_INSTRUCTIONS.txt
+          echo "Run on LOCAL: aws ssm start-session --target $INSTANCE_ID --region $AWS_REGION --document-name AWS-StartPortForwardingSession --parameters '{\"portNumber\":[\"18789\"],\"localPortNumber\":[\"18789\"]}'" >> /home/ubuntu/ACCESS_INSTRUCTIONS.txt
+          echo "Then open: http://localhost:18789/?token=$GATEWAY_TOKEN" >> /home/ubuntu/ACCESS_INSTRUCTIONS.txt
+          chown ubuntu:ubuntu /home/ubuntu/ACCESS_INSTRUCTIONS.txt
+          
           # Create SSM access script
           cat > /home/ubuntu/ssm-portforward.sh << 'EOF'
           #!/bin/bash
@@ -696,6 +746,10 @@ Resources:
           echo "SUCCESS" > /home/ubuntu/.clawdbot/setup_status.txt
           echo "Setup completed: $(date)" >> /home/ubuntu/.clawdbot/setup_status.txt
           
+          # Signal CloudFormation with token and instance info
+          SIGNAL_DATA="{\"token\":\"$GATEWAY_TOKEN\",\"instanceId\":\"$INSTANCE_ID\",\"region\":\"$AWS_REGION\",\"accessUrl\":\"http://localhost:18789/?token=$GATEWAY_TOKEN\"}"
+          /opt/aws/bin/cfn-signal -e 0 -d "$SIGNAL_DATA" -r "Clawdbot installation complete" '${ClawdbotWaitHandle}'
+          
           echo "=========================================="
           echo "Clawdbot installation complete!"
           echo "Access via SSM Session Manager"
@@ -715,34 +769,18 @@ Outputs:
     Description: "SSM Session Manager connection command"
     Value: !Sub "aws ssm start-session --target ${ClawdbotInstance} --region ${AWS::Region}"
 
+  GatewayToken:
+    Description: "Gateway Token (from WaitCondition)"
+    Value: !GetAtt ClawdbotWaitCondition.Data
+
   SSMPortForwardCommand:
-    Description: "SSM port forwarding command (run locally)"
+    Description: "STEP 1: Run on LOCAL computer (keep terminal open)"
     Value: !Sub |
-      aws ssm start-session \
-        --target ${ClawdbotInstance} \
-        --region ${AWS::Region} \
-        --document-name AWS-StartPortForwardingSession \
-        --parameters '{"portNumber":["18789"],"localPortNumber":["18789"]}'
+      aws ssm start-session --target ${ClawdbotInstance} --region ${AWS::Region} --document-name AWS-StartPortForwardingSession --parameters '{"portNumber":["18789"],"localPortNumber":["18789"]}'
 
-  LocalAccessURL:
-    Description: "Local access URL (after port forwarding)"
-    Value: "http://localhost:18789/?token=<get-from-instance>"
-
-  GetTokenCommand:
-    Description: "Get Gateway Token (via SSM)"
-    Value: !Sub |
-      Step 1: Connect to instance via SSM
-      aws ssm start-session --target ${ClawdbotInstance} --region ${AWS::Region}
-      
-      Step 2: Switch to ubuntu user and get token
-      sudo su - ubuntu
-      cat ~/.clawdbot/gateway_token.txt
-
-  QuickStartScript:
-    Description: "Quick start helper script (run after SSM connection)"
-    Value: !Sub |
-      After connecting via SSM, run: ./ssm-portforward.sh
-      This script will show you the complete port forwarding command with your instance ID and token.
+  CompleteAccessURL:
+    Description: "STEP 2: Open this URL in browser (token included)"
+    Value: !GetAtt ClawdbotWaitCondition.Data
 
   BedrockModel:
     Description: "Bedrock model in use"
