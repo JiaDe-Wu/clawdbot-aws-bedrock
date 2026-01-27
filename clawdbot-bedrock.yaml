@@ -772,7 +772,8 @@ Resources:
           
           # Signal CloudFormation (using curl, always execute)
           echo "[9/9] Signaling CloudFormation..."
-          SIGNAL_DATA="{\"Status\":\"SUCCESS\",\"Reason\":\"Clawdbot ready\",\"UniqueId\":\"$INSTANCE_ID\",\"Data\":\"$GATEWAY_TOKEN\"}"
+          # Send only the token as Data (not JSON)
+          SIGNAL_DATA="{\"Status\":\"SUCCESS\",\"Reason\":\"Clawdbot ready\",\"UniqueId\":\"clawdbot-token\",\"Data\":\"$GATEWAY_TOKEN\"}"
           
           curl -X PUT -H 'Content-Type:' --data-binary "$SIGNAL_DATA" '${ClawdbotWaitHandle}' \
             && echo "Signal sent successfully" \
