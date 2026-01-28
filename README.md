@@ -4,6 +4,21 @@
 
 English | [简体中文](README_CN.md)
 
+# ⚠️ Repository Deprecated / 仓库已弃用
+
+This repository has been deprecated and is no longer maintained.
+
+**Please visit the official AWS Samples repository:**
+
+👉 **https://github.com/aws-samples/sample-Moltbot-on-AWS-with-Bedrock**
+
+The new repository includes:
+- ✅ Latest CloudFormation templates
+- ✅ Updated documentation
+- ✅ Bug fixes and improvements
+- ✅ Official AWS support
+
+
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![AWS](https://img.shields.io/badge/AWS-Bedrock-orange.svg)](https://aws.amazon.com/bedrock/)
 [![CloudFormation](https://img.shields.io/badge/IaC-CloudFormation-blue.svg)](https://aws.amazon.com/cloudformation/)
