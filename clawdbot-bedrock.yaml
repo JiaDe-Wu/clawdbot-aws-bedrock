@@ -24,17 +24,16 @@ Metadata:
 Parameters:
   ClawdbotModel:
     Type: String
-    Default: "anthropic.claude-sonnet-4-5-20250929-v1:0"
-    Description: "Bedrock model ID - Claude Sonnet 4.5 (best performance)"
+    Default: "us.anthropic.claude-sonnet-4-5-20250929-v1:0"
+    Description: "Bedrock model ID (use region-specific prefix: us./eu./apac.)"
     AllowedValues:
-      - "anthropic.claude-sonnet-4-5-20250929-v1:0"
+      - "us.anthropic.claude-sonnet-4-5-20250929-v1:0"
+      - "global.anthropic.claude-sonnet-4-5-20250929-v1:0"
       - "anthropic.claude-sonnet-4-20250514-v1:0"
       - "anthropic.claude-3-5-sonnet-20241022-v2:0"
-      - "amazon.nova-2-sonic-v1:0"
-      - "qwen.qwen3-vl-235b-a22b"
-      - "openai.gpt-oss-safeguard-120b"
-      - "google.gemma-3-27b-it"
-      - "minimax.minimax-m2"
+      - "anthropic.claude-opus-4-20250514"
+      - "us.amazon.nova-pro-v1:0"
+      - "anthropic.claude-3-haiku-20240307-v1:0"
 
   InstanceType:
     Type: String
@@ -219,9 +218,9 @@ Resources:
                       bedrock.list_foundation_models(byProvider='Anthropic')
                       results['bedrock_available'] = True
                       results['checks_passed'] += 1
-                      logger.info("✓ Bedrock service available")
+                      logger.info("? Bedrock service available")
                   except ClientError as e:
-                      logger.error(f"✗ Bedrock check failed: {e}")
+                      logger.error(f"? Bedrock check failed: {e}")
                       send_response(event, context, 'FAILED', 
                                   {'Error': 'Bedrock not available in this region'})
                       return
@@ -235,7 +234,7 @@ Resources:
                       logger.info(f"Available Anthropic models: {list(available_models.keys())}")
                       
                       if model_id not in available_models:
-                          logger.error(f"✗ Model {model_id} not found")
+                          logger.error(f"? Model {model_id} not found")
                           logger.error(f"Available models: {list(available_models.keys())}")
                           send_response(event, context, 'FAILED',
                                       {'Error': f'Model {model_id} not found in this region. Available: {", ".join(list(available_models.keys())[:5])}'})
@@ -244,17 +243,17 @@ Resources:
                       model_status = available_models[model_id].get('modelLifecycle', {}).get('status')
                       
                       if model_status != 'ACTIVE':
-                          logger.error(f"✗ Model status: {model_status}")
+                          logger.error(f"? Model status: {model_status}")
                           send_response(event, context, 'FAILED',
                                       {'Error': f'Model not enabled. Go to Bedrock Console and enable {model_id}'})
                           return
                       
                       results['model_status'] = model_status
                       results['checks_passed'] += 1
-                      logger.info(f"✓ Model {model_id} is ACTIVE")
+                      logger.info(f"? Model {model_id} is ACTIVE")
                       
                   except ClientError as e:
-                      logger.error(f"✗ Model check failed: {e}")
+                      logger.error(f"? Model check failed: {e}")
                       send_response(event, context, 'FAILED',
                                   {'Error': f'Failed to check model: {str(e)}'})
                       return
@@ -275,10 +274,10 @@ Resources:
                       
                       results['model_invocation'] = 'SUCCESS'
                       results['checks_passed'] += 1
-                      logger.info("✓ Model invocation successful")
+                      logger.info("? Model invocation successful")
                       
                   except ClientError as e:
-                      logger.error(f"✗ Invocation failed: {e}")
+                      logger.error(f"? Invocation failed: {e}")
                       send_response(event, context, 'FAILED',
                                   {'Error': f'Model invocation failed. Check IAM permissions.'})
                       return
@@ -291,7 +290,7 @@ Resources:
                       'ModelStatus': model_status
                   }
                   
-                  logger.info(f"✓ All checks passed: {response_data}")
+                  logger.info(f"? All checks passed: {response_data}")
                   send_response(event, context, 'SUCCESS', response_data)
                   
               except Exception as e:
@@ -626,11 +625,11 @@ Resources:
           export CLAWDBOT_USE_BEDROCK=true
           EOF
           
-          # 启用 systemd linger
+          # ?? systemd linger
           loginctl enable-linger ubuntu
           systemctl start user@1000.service
           
-          # 运行 Clawdbot onboarding
+          # ?? Clawdbot onboarding
           echo "[8/9] Configuring Clawdbot..."
           
           # Create config directory
@@ -759,7 +758,7 @@ Resources:
           chmod +x /home/ubuntu/ssm-portforward.sh
           chown ubuntu:ubuntu /home/ubuntu/ssm-portforward.sh
           
-          # 完成
+          # ??
           echo "[9/9] Complete!"
           echo "SUCCESS" > /home/ubuntu/.clawdbot/setup_status.txt
           echo "Setup completed: $(date)" >> /home/ubuntu/.clawdbot/setup_status.txt
