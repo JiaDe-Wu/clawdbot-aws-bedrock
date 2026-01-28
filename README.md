@@ -1,6 +1,6 @@
-# Clawdbot on AWS with Bedrock
+# Moltbot on AWS with Bedrock
 
-> Deploy [Clawdbot](https://github.com/clawdbot/clawdbot) on AWS using Amazon Bedrock and native AWS services. Enterprise-ready, secure, one-click deployment.
+> Deploy [Moltbot](https://github.com/moltbot/moltbot) (formerly Clawdbot) on AWS using Amazon Bedrock and native AWS services. Enterprise-ready, secure, one-click deployment.
 
 English | [简体中文](README_CN.md)
 
@@ -10,7 +10,7 @@ English | [简体中文](README_CN.md)
 
 ## What is This?
 
-[Clawdbot](https://github.com/clawdbot/clawdbot) is an open-source personal AI assistant that connects to WhatsApp, Slack, Discord, and more. This project provides an **AWS-native deployment** using Amazon Bedrock instead of Anthropic API keys.
+[Moltbot](https://github.com/moltbot/moltbot) (formerly Clawdbot) is an open-source personal AI assistant that connects to WhatsApp, Slack, Discord, and more. This project provides an **AWS-native deployment** using Amazon Bedrock instead of Anthropic API keys.
 
 ## Why AWS Native?
 
