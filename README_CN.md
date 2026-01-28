@@ -1,18 +1,19 @@
 # Clawdbot AWS Bedrock 部署方案
 
-> 在 AWS 上使用 Amazon Bedrock 部署 [Clawdbot](https://github.com/clawdbot/clawdbot)。企业级、安全、一键部署。
+> 在 AWS 上使用 Amazon Bedrock 部署 [Moltbot](https://github.com/moltbot/moltbot)。企业级、安全、一键部署。
 
 [English](README.md) | 简体中文
 
 ## 这是什么？
 
-[Clawdbot](https://github.com/clawdbot/clawdbot) 是一个开源的个人 AI 助手，可以连接 WhatsApp、Slack、Discord 等平台。本项目提供 **AWS 原生部署方案**，使用 Amazon Bedrock 替代 Anthropic API Key。
+[Moltbot](https://github.com/moltbot/moltbot) 是一个开源的个人 AI 助手，可以连接 WhatsApp、Slack、Discord 等平台。本项目提供 **AWS 原生部署方案**，使用 Amazon Bedrock 替代 Anthropic API Key。
 
 ## 为什么选择 AWS 原生版？
 
-| 原版 Clawdbot | 本项目 |
+| 原版 Moltbot | 本项目 |
 |---------------|--------|
 | Anthropic API Key | **Amazon Bedrock + IAM** |
+| 单一模型 | **多模型支持（Claude、Nova、DeepSeek 等）** |
 | Tailscale VPN | **SSM Session Manager** |
 | 手动配置 | **CloudFormation 一键部署** |
 | 无审计日志 | **CloudTrail 自动审计** |
@@ -21,11 +22,12 @@
 ## 核心优势
 
 - 🔐 **无需管理 API Key** - IAM 角色自动认证
+- 🤖 **多模型支持** - 轻松便捷因地制宜切换 Claude、Nova、DeepSeek
 - 🏢 **企业级** - 完整的 CloudTrail 审计日志和合规支持
 - 🚀 **一键部署** - CloudFormation 自动化所有配置
-- ✅ **部署前检查** - Lambda 自动验证 Bedrock 访问权限
 - 🔒 **安全访问** - SSM Session Manager，无需暴露公网端口
 - 💰 **成本透明** - AWS 原生成本追踪和优化
+
 
 ## 快速开始
 
@@ -51,13 +53,13 @@
 | 区域 | 部署 |
 |------|------|
 | **美国西部（俄勒冈）** | [![Launch Stack](https://s3.amazonaws.com/cloudformation-examples/cloudformation-launch-stack.png)](https://console.aws.amazon.com/cloudformation/home?region=us-west-2#/stacks/create/review?stackName=clawdbot-bedrock&templateURL=https://sharefile-jiade.s3.cn-northwest-1.amazonaws.com.cn/clawdbot-bedrock.yaml) |
+| **美国东部（弗吉尼亚）** | [![Launch Stack](https://s3.amazonaws.com/cloudformation-examples/cloudformation-launch-stack.png)](https://console.aws.amazon.com/cloudformation/home?region=us-east-1#/stacks/create/review?stackName=clawdbot-bedrock&templateURL=https://sharefile-jiade.s3.cn-northwest-1.amazonaws.com.cn/clawdbot-bedrock.yaml) |
+| **欧洲（爱尔兰）** | [![Launch Stack](https://s3.amazonaws.com/cloudformation-examples/cloudformation-launch-stack.png)](https://console.aws.amazon.com/cloudformation/home?region=eu-west-1#/stacks/create/review?stackName=clawdbot-bedrock&templateURL=https://sharefile-jiade.s3.cn-northwest-1.amazonaws.com.cn/clawdbot-bedrock.yaml) |
 | **亚太（东京）** | [![Launch Stack](https://s3.amazonaws.com/cloudformation-examples/cloudformation-launch-stack.png)](https://console.aws.amazon.com/cloudformation/home?region=ap-northeast-1#/stacks/create/review?stackName=clawdbot-bedrock&templateURL=https://sharefile-jiade.s3.cn-northwest-1.amazonaws.com.cn/clawdbot-bedrock.yaml) |
 
+> **说明**：使用 Global CRIS 配置文件 - 在全球 30+ 区域可用。可在任意区域部署，请求会自动路由到最优位置。
 
-> **注意**：
-> - **中国区域（北京、宁夏）占不支持部署此方案
-> - 部署前在 [Bedrock Console](https://console.aws.amazon.com/bedrock/) 启用模型
-> - 在目标区域创建 EC2 密钥对
+> **注意**：在目标区域创建 EC2 密钥对
 
 
 **部署后（约8分钟），查看CloudFormation输出标签：**
@@ -92,32 +94,6 @@ aws cloudformation create-stack \
 aws cloudformation wait stack-create-complete \
   --stack-name clawdbot-bedrock \
   --region us-west-2
-```
-
-> **注意**：Lambda 会在部署时自动运行预检查。如果失败，查看 CloudFormation 事件获取详细信息。
-
-### 访问 Clawdbot
-
-```bash
-# 获取实例 ID
-INSTANCE_ID=$(aws cloudformation describe-stacks \
-  --stack-name clawdbot-bedrock \
-  --query 'Stacks[0].Outputs[?OutputKey==`InstanceId`].OutputValue' \
-  --output text)
-
-# 启动端口转发（保持终端打开）
-aws ssm start-session \
-  --target $INSTANCE_ID \
-  --document-name AWS-StartPortForwardingSession \
-  --parameters '{"portNumber":["18789"],"localPortNumber":["18789"]}'
-
-# 获取 token（新终端）
-aws ssm start-session --target $INSTANCE_ID
-sudo su - ubuntu
-cat ~/.clawdbot/gateway_token.txt
-
-# 在浏览器打开
-http://localhost:18789/?token=<你的token>
 ```
 
 ## 如何使用 Clawdbot
@@ -183,6 +159,7 @@ Your Telegram user id: 123456789
 3. 安装 App 到工作区
 4. 在 Web UI 配置 Slack channel
 5. 测试：邀请 bot 到频道并 @它
+
 
 ### 使用 Clawdbot
 
@@ -254,7 +231,7 @@ clawdbot skills installed
 始终以友好的语气回复。
 ```
 
-详细指南请访问 [Clawdbot 文档](https://docs.molt.bot/)。
+详细指南请访问 [molt 文档](https://docs.molt.bot/)。
 
 ## 架构
 
@@ -298,12 +275,14 @@ Amazon Bedrock（Claude Sonnet 4）
 | 模型 | 输入 | 输出 |
 |------|------|------|
 | Claude Sonnet 4 | $3/百万 tokens | $15/百万 tokens |
-| Claude Opus 4 | $15/百万 tokens | $75/百万 tokens |
-| Nova Pro | $0.80/百万 tokens | $3.20/百万 tokens |
+| Claude 3.5 Sonnet v2 | $3/百万 tokens | $15/百万 tokens |
+| Claude 3.5 Haiku | $1/百万 tokens | $5/百万 tokens |
+| Claude 3 Haiku | $0.25/百万 tokens | $1.25/百万 tokens |
+| Claude 3 Opus | $15/百万 tokens | $75/百万 tokens |
 
-**示例**：每天 100 次对话 ≈ $10-20/月
+**示例**：每天 100 次对话（Sonnet 4）≈ $10-15/月
 
-**总计**：轻度使用约 $70-85/月
+**总计**：轻度使用约 $70-80/月
 
 ### 成本优化
 
@@ -365,11 +344,16 @@ EC2（Clawdbot）：
 
 ```yaml
 ClawdbotModel:
-  - us.anthropic.claude-sonnet-4-20250514-v1:0  # 默认，推荐
-  - us.amazon.nova-pro-v1:0                     # 最便宜
-  - anthropic.claude-opus-4-20250514            # 最强大
-  - anthropic.claude-3-5-sonnet-20241022-v2:0   # 稳定版
+  - anthropic.claude-sonnet-4-5-20250929-v1:0  # 默认，最强能力
+  - anthropic.claude-3-5-sonnet-20241022-v2:0  # 稳定备选
+  - anthropic.claude-3-5-haiku-20241022-v1:0   # 更快，更便宜
+  - anthropic.claude-3-haiku-20240307-v1:0     # 最快/最便宜
 ```
+
+**模型选择指南**：
+- **Claude Sonnet 4.5**（默认）：最佳性能、编码和复杂推理能力。在全球 30+ 个区域可用。
+- **Nova v2**：性能和可用性的最佳平衡。
+- **Claude 3.5 Haiku**：快速且经济，适合简单任务。
 
 ### 实例类型
 
@@ -596,3 +580,4 @@ Clawdbot 本身有独立的许可证。参见 [Clawdbot License](https://github.
 **Built by builder + Kiro for AWS customers and partners**
 
 在你控制的 AWS 基础设施上部署个人 AI 助手 🦞
+
