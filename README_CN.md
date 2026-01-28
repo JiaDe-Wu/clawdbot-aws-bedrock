@@ -56,6 +56,18 @@
 | **亚太（东京）** | [![Launch Stack](https://s3.amazonaws.com/cloudformation-examples/cloudformation-launch-stack.png)](https://console.aws.amazon.com/cloudformation/home?region=ap-northeast-1#/stacks/create/review?stackName=clawdbot-bedrock&templateURL=https://sharefile-jiade.s3.cn-northwest-1.amazonaws.com.cn/clawdbot-bedrock.yaml) |
 | **中国区域** 🇨🇳 | 敬请期待（Bedrock 尚未开放） |
 
+**部署后（约8分钟），查看CloudFormation输出标签：**
+
+1.**安装SSM插件**：点击Step1InstallSSMPlugin中的链接（一次性设置）
+2.**端口转发**：复制Step2PortForwarding中的命令，在电脑上运行（保持终端开启）
+3.**打开URL**：复制Step3AccessURL中的URL，在浏览器中打开（已包含token！）
+4.**开始聊天**：在Web界面连接WhatsApp/Telegram/Discord
+
+![CloudFormation Outputs](images/20260128-105244.jpeg)
+![Clawdbot Web UI](images/20260128-105059.jpg)
+
+
+
 > **注意**：
 > - **中国区域（北京、宁夏）不支持 Bedrock**，无法部署此方案
 > - 部署前在 [Bedrock Console](https://console.aws.amazon.com/bedrock/) 启用模型
