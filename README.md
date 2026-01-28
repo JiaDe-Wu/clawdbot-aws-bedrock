@@ -54,11 +54,16 @@ Click to deploy:
 
 | Region | Launch Stack |
 |--------|--------------|
-| **US West (Oregon)** | [![Launch Stack](https://s3.amazonaws.com/cloudformation-examples/cloudformation-launch-stack.png)](https://console.aws.amazon.com/cloudformation/home?region=us-west-2#/stacks/create/review?stackName=clawdbot-bedrock&templateURL=https://sharefile-jiade.s3.cn-northwest-1.amazonaws.com.cn/clawdbot-bedrock.yaml) |
 | **US East (N. Virginia)** | [![Launch Stack](https://s3.amazonaws.com/cloudformation-examples/cloudformation-launch-stack.png)](https://console.aws.amazon.com/cloudformation/home?region=us-east-1#/stacks/create/review?stackName=clawdbot-bedrock&templateURL=https://sharefile-jiade.s3.cn-northwest-1.amazonaws.com.cn/clawdbot-bedrock.yaml) |
+| **US East (Ohio)** | [![Launch Stack](https://s3.amazonaws.com/cloudformation-examples/cloudformation-launch-stack.png)](https://console.aws.amazon.com/cloudformation/home?region=us-east-2#/stacks/create/review?stackName=clawdbot-bedrock&templateURL=https://sharefile-jiade.s3.cn-northwest-1.amazonaws.com.cn/clawdbot-bedrock.yaml) |
+| **US West (Oregon)** | [![Launch Stack](https://s3.amazonaws.com/cloudformation-examples/cloudformation-launch-stack.png)](https://console.aws.amazon.com/cloudformation/home?region=us-west-2#/stacks/create/review?stackName=clawdbot-bedrock&templateURL=https://sharefile-jiade.s3.cn-northwest-1.amazonaws.com.cn/clawdbot-bedrock.yaml) |
 | **EU (Ireland)** | [![Launch Stack](https://s3.amazonaws.com/cloudformation-examples/cloudformation-launch-stack.png)](https://console.aws.amazon.com/cloudformation/home?region=eu-west-1#/stacks/create/review?stackName=clawdbot-bedrock&templateURL=https://sharefile-jiade.s3.cn-northwest-1.amazonaws.com.cn/clawdbot-bedrock.yaml) |
+| **EU (Frankfurt)** | [![Launch Stack](https://s3.amazonaws.com/cloudformation-examples/cloudformation-launch-stack.png)](https://console.aws.amazon.com/cloudformation/home?region=eu-central-1#/stacks/create/review?stackName=clawdbot-bedrock&templateURL=https://sharefile-jiade.s3.cn-northwest-1.amazonaws.com.cn/clawdbot-bedrock.yaml) |
 | **Asia Pacific (Tokyo)** | [![Launch Stack](https://s3.amazonaws.com/cloudformation-examples/cloudformation-launch-stack.png)](https://console.aws.amazon.com/cloudformation/home?region=ap-northeast-1#/stacks/create/review?stackName=clawdbot-bedrock&templateURL=https://sharefile-jiade.s3.cn-northwest-1.amazonaws.com.cn/clawdbot-bedrock.yaml) |
-| **China Regions** 🇨🇳 | Coming soon (Bedrock not yet available) |
+| **Asia Pacific (Singapore)** | [![Launch Stack](https://s3.amazonaws.com/cloudformation-examples/cloudformation-launch-stack.png)](https://console.aws.amazon.com/cloudformation/home?region=ap-southeast-1#/stacks/create/review?stackName=clawdbot-bedrock&templateURL=https://sharefile-jiade.s3.cn-northwest-1.amazonaws.com.cn/clawdbot-bedrock.yaml) |
+| **Asia Pacific (Sydney)** | [![Launch Stack](https://s3.amazonaws.com/cloudformation-examples/cloudformation-launch-stack.png)](https://console.aws.amazon.com/cloudformation/home?region=ap-southeast-2#/stacks/create/review?stackName=clawdbot-bedrock&templateURL=https://sharefile-jiade.s3.cn-northwest-1.amazonaws.com.cn/clawdbot-bedrock.yaml) |
+
+> **Supported Regions**: Claude Sonnet 4.5 is available in 30+ regions including US, EU, Asia Pacific, Canada, South America, Middle East, and Africa. [See full list](https://docs.aws.amazon.com/bedrock/latest/userguide/models-supported.html)
 
 **After deployment (~8 minutes), check CloudFormation Outputs tab**:
 
@@ -67,9 +72,9 @@ Click to deploy:
 3. **Open URL**: Copy URL from `Step3AccessURL`, open in browser (token included!)
 4. **Start Chatting**: Connect WhatsApp/Telegram/Discord in Web UI
 
+
 ![CloudFormation Outputs](images/20260128-105244.jpeg)
 ![Clawdbot Web UI](images/20260128-105059.jpg)
-
 
 > **Before deploying**:
 > - Before deploying, enable Bedrock models in Bedrock Console
@@ -199,19 +204,7 @@ http://localhost:18789/?token=<your-token>
 4. **Configure**: In Web UI, add Slack channel
 5. **Test**: Invite bot to a channel and mention it
 
-#### WeChat / 微信
 
-> **Note**: Clawdbot does NOT officially support WeChat due to WeChat's closed API and restrictions on bot access.
-
-**Alternatives for Chinese users**:
-- Use **WhatsApp** (available in China with VPN)
-- Use **Telegram** (works in China with proxy)
-- Use **Web UI** directly (access via SSM port forwarding)
-
-If you need WeChat integration, consider:
-- Using WeChat Work (企业微信) API (requires enterprise account)
-- Building a custom bridge using WeChat's limited APIs
-- Using third-party WeChat bot frameworks (not officially supported)
 
 ### Using Clawdbot
 
@@ -358,17 +351,18 @@ Security: All AWS traffic via private network
 
 | Model | Input | Output |
 |-------|-------|--------|
-| Claude Opus 4 | $15/1M tokens | $75/1M tokens |
-| Claude Sonnet 3.5 v2 | $3/1M tokens | $15/1M tokens |
-| Claude Haiku 3 | $0.25/1M tokens | $1.25/1M tokens |
+| Claude Sonnet 4.5 | $3/1M tokens | $15/1M tokens |
+| Claude 3.5 Sonnet v2 | $3/1M tokens | $15/1M tokens |
+| Claude 3.5 Haiku | $1/1M tokens | $5/1M tokens |
+| Claude 3 Haiku | $0.25/1M tokens | $1.25/1M tokens |
 
-**Example**: 100 conversations/day with Opus 4 ≈ $10-20/month
+**Example**: 100 conversations/day with Sonnet 4.5 ≈ $10-15/month
 
-**Total**: ~$70-85/month for light usage
+**Total**: ~$70-80/month for light usage
 
 ### Cost Optimization
 
-- Use Sonnet instead of Opus: 80% cheaper
+- Use Haiku instead of Sonnet: 75% cheaper
 - Disable VPC endpoints: Save $22/month (less secure)
 - Use Savings Plans: Save 30-40% on EC2
 - Use Spot Instances: Save 70% on EC2 (may be interrupted)
@@ -380,10 +374,16 @@ Security: All AWS traffic via private network
 ```yaml
 # In CloudFormation parameters
 ClawdbotModel:
-  - anthropic.claude-3-5-sonnet-20241022-v2:0  # Recommended
-  - anthropic.claude-opus-4-20250514           # Most capable
+  - anthropic.claude-sonnet-4-5-20250929-v1:0  # Default, most capable
+  - anthropic.claude-3-5-sonnet-20241022-v2:0  # Stable alternative
+  - anthropic.claude-3-5-haiku-20241022-v1:0   # Faster, cheaper
   - anthropic.claude-3-haiku-20240307-v1:0     # Fastest/cheapest
 ```
+
+**Model Selection Guide**:
+- **Claude Sonnet 4.5** (default): Best performance, coding, and complex reasoning. Available in 30+ regions worldwide.
+- **Claude 3.5 Sonnet v2**: Excellent balance of performance and availability.
+- **Claude 3.5 Haiku**: Fast and cost-effective for simpler tasks.
 
 ### Instance Types
 
@@ -604,6 +604,6 @@ This deployment template is provided as-is. Clawdbot itself is licensed under it
 
 ---
 
-**Made with ❤️ for AWS customers**
+**Built by builder + Kiro for AWS customers and partners**
 
 Deploy your personal AI assistant on AWS infrastructure you control.
