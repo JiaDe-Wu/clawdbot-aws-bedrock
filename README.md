@@ -16,12 +16,8 @@ The new repository includes:
 - ✅ Latest CloudFormation templates
 - ✅ Updated documentation
 - ✅ Bug fixes and improvements
-- ✅ Official AWS support
 
-
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![AWS](https://img.shields.io/badge/AWS-Bedrock-orange.svg)](https://aws.amazon.com/bedrock/)
-[![CloudFormation](https://img.shields.io/badge/IaC-CloudFormation-blue.svg)](https://aws.amazon.com/cloudformation/)
+---
 
 ## What is This?
 
