@@ -130,8 +130,10 @@ http://localhost:18789/?token=<你的token>
 
 1. **通过BotFather配置交互机器人**：创建 Telegram Bot 打开 Telegram，搜索 `@BotFather`，发送 `/newbot`。按提示操作： 1.  Bot 的名字 2. 设置Bot用户名（必须以 `bot` 结尾，比如 `jiade_clawd_bot`）  BotFather 会返回 Token 例如：
 123412344321:ABC1234567890def1234567890GHIjklMNOpqrSTUvwxYZ
+   
 2. **在 Web UI 配置 Telegram channel**：添加channels模板段如图，点击保存和reload即可完成配置生效加载
-``
+
+```bash
 "channels": {
     "telegram": {
       "enabled": true,
@@ -139,12 +141,15 @@ http://localhost:18789/?token=<你的token>
       "dmPolicy": "pairing"
     }
   }
-``
+```
+
 3. **客户端配置校验码**：回到你创建的Telegram机器人，在配置pairing的情况下，第一次给 Bot 发消息，它会回复配对码,例如：
-``
+
+```bash
 Pairing code: GE4BQTGD
 Your Telegram user id: 123456789
-``
+```
+
 4. **服务器端校验**：通过 SSM 命令免登录校验 或者 登录到 EC2 服务器 键入命令校验： ``clawdbot pairing approve telegram <你的 Pairing code>``
 ![CloudFormation Outputs](images/20260128-144241.jpg)
 
