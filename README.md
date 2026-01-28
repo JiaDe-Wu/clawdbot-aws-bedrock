@@ -60,7 +60,18 @@ Click to deploy:
 | **Asia Pacific (Tokyo)** | [![Launch Stack](https://s3.amazonaws.com/cloudformation-examples/cloudformation-launch-stack.png)](https://console.aws.amazon.com/cloudformation/home?region=ap-northeast-1#/stacks/create/review?stackName=clawdbot-bedrock&templateURL=https://sharefile-jiade.s3.cn-northwest-1.amazonaws.com.cn/clawdbot-bedrock.yaml) |
 | **China Regions** 🇨🇳 | Coming soon (Bedrock not yet available) |
 
-> **Note**:
+**After deployment (~8 minutes), check CloudFormation Outputs tab**:
+
+1. **Install SSM Plugin**: Click link in `Step1InstallSSMPlugin` (one-time setup)
+2. **Port Forwarding**: Copy command from `Step2PortForwarding`, run on your computer (keep terminal open)
+3. **Open URL**: Copy URL from `Step3AccessURL`, open in browser (token included!)
+4. **Start Chatting**: Connect WhatsApp/Telegram/Discord in Web UI
+
+![CloudFormation Outputs](images/20260128-105244.jpeg)
+![Clawdbot Web UI](images/20260128-105059.jpg)
+
+
+> **Before deploying**:
 > - Before deploying, enable Bedrock models in Bedrock Console
 > - Create an EC2 key pair in your target region
 > - Lambda will automatically validate Bedrock access during deployment
