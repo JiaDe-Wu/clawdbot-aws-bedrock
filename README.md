@@ -17,6 +17,7 @@ English | [简体中文](README_CN.md)
 | Original Clawdbot | This Project |
 |-------------------|--------------|
 | Anthropic API Key | **Amazon Bedrock + IAM** |
+| Single model | **Multiple models (Claude, Nova, DeepSeek, etc.)** |
 | Tailscale VPN | **SSM Session Manager** |
 | Manual setup | **CloudFormation (1-click)** |
 | No audit logs | **CloudTrail (automatic)** |
@@ -25,9 +26,9 @@ English | [简体中文](README_CN.md)
 ## Key Benefits
 
 - 🔐 **No API Key Management** - IAM roles handle authentication automatically
+- 🤖 **Multi-Model Support** - Easily Switch between Claude, Nova, DeepSeek
 - 🏢 **Enterprise-Ready** - Full CloudTrail audit logs and compliance support
 - 🚀 **One-Click Deploy** - CloudFormation automates everything
-- ✅ **Pre-Deployment Check** - Lambda validates Bedrock access before deployment
 - 🔒 **Secure Access** - SSM Session Manager, no public ports exposed
 - 💰 **Cost Visibility** - Native AWS cost tracking and optimization
 
@@ -55,8 +56,11 @@ Click to deploy:
 | Region | Launch Stack |
 |--------|--------------|
 | **US West (Oregon)** | [![Launch Stack](https://s3.amazonaws.com/cloudformation-examples/cloudformation-launch-stack.png)](https://console.aws.amazon.com/cloudformation/home?region=us-west-2#/stacks/create/review?stackName=clawdbot-bedrock&templateURL=https://sharefile-jiade.s3.cn-northwest-1.amazonaws.com.cn/clawdbot-bedrock.yaml) |
+| **US East (N. Virginia)** | [![Launch Stack](https://s3.amazonaws.com/cloudformation-examples/cloudformation-launch-stack.png)](https://console.aws.amazon.com/cloudformation/home?region=us-east-1#/stacks/create/review?stackName=clawdbot-bedrock&templateURL=https://sharefile-jiade.s3.cn-northwest-1.amazonaws.com.cn/clawdbot-bedrock.yaml) |
+| **EU (Ireland)** | [![Launch Stack](https://s3.amazonaws.com/cloudformation-examples/cloudformation-launch-stack.png)](https://console.aws.amazon.com/cloudformation/home?region=eu-west-1#/stacks/create/review?stackName=clawdbot-bedrock&templateURL=https://sharefile-jiade.s3.cn-northwest-1.amazonaws.com.cn/clawdbot-bedrock.yaml) |
 | **Asia Pacific (Tokyo)** | [![Launch Stack](https://s3.amazonaws.com/cloudformation-examples/cloudformation-launch-stack.png)](https://console.aws.amazon.com/cloudformation/home?region=ap-northeast-1#/stacks/create/review?stackName=clawdbot-bedrock&templateURL=https://sharefile-jiade.s3.cn-northwest-1.amazonaws.com.cn/clawdbot-bedrock.yaml) |
 
+> **Note**: Using Global CRIS profiles - works in 30+ regions worldwide. Deploy in any region, requests auto-route to optimal locations.
 
 **After deployment (~8 minutes), check CloudFormation Outputs tab**:
 
@@ -103,8 +107,6 @@ Click to deploy:
 ```bash
 ./scripts/deploy.sh clawdbot-bedrock us-west-2 your-keypair
 ```
-
-**Using AWS CLI**:
 
 **Using AWS CLI**:
 
@@ -358,7 +360,7 @@ Security: All AWS traffic via private network
 - Use Haiku instead of Sonnet: 75% cheaper
 - Disable VPC endpoints: Save $22/month (less secure)
 - Use Savings Plans: Save 30-40% on EC2
-- Use Spot Instances: Save 70% on EC2 (may be interrupted)
+- Use Spot Instances: Save 70% on EC2 (may be interrupted)https://github.com/JiaDe-Wu/clawdbot-aws-bedrock/blob/main/README.md
 
 ## Configuration
 
