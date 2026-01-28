@@ -4,6 +4,23 @@
 
 [English](README.md) | 简体中文
 
+
+
+本仓库已弃用，不再维护。
+
+**请访问亚马逊云科技官方示例仓库：**
+
+👉 **https://github.com/aws-samples/sample-Moltbot-on-AWS-with-Bedrock**
+
+新仓库包含：
+- ✅ 最新的 CloudFormation 模板
+- ✅ 更新的文档
+- ✅ Bug 修复和改进
+- ✅ 官方技术支持
+
+---
+
+
 ## 这是什么？
 
 [Moltbot](https://github.com/moltbot/moltbot) 是一个开源的个人 AI 助手，可以连接 WhatsApp、Slack、Discord 等平台。本项目提供 **AWS 原生部署方案**，使用 Amazon Bedrock 替代 Anthropic API Key。
