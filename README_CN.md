@@ -126,6 +126,28 @@ http://localhost:18789/?token=<你的token>
 ## 如何使用 Clawdbot
 
 ### 连接消息平台
+#### Telegram (配置示例)
+
+1. **通过BotFather配置交互机器人**：创建 Telegram Bot 打开 Telegram，搜索 `@BotFather`，发送 `/newbot`。按提示操作： 1.  Bot 的名字 2. 设置Bot用户名（必须以 `bot` 结尾，比如 `jiade_clawd_bot`）  BotFather 会返回 Token 例如：
+123412344321:ABC1234567890def1234567890GHIjklMNOpqrSTUvwxYZ
+2. **在 Web UI 配置 Telegram channel**：添加channels模板段如图，点击保存和reload即可完成配置生效加载
+``
+"channels": {
+    "telegram": {
+      "enabled": true,
+      "botToken": "你的Bot Token",
+      "dmPolicy": "pairing"
+    }
+  }
+``
+3. **客户端配置校验码**：回到你创建的Telegram机器人，在配置pairing的情况下，第一次给 Bot 发消息，它会回复配对码,例如：
+``
+Pairing code: GE4BQTGD
+Your Telegram user id: 123456789
+``
+4. **服务器端校验**：通过 SSM 命令免登录校验 或者 登录到 EC2 服务器 键入命令校验： ``clawdbot pairing approve telegram <你的 Pairing code>``
+![CloudFormation Outputs](images/20260128-144241.jpg)
+
 
 #### WhatsApp（推荐）
 
@@ -137,18 +159,6 @@ http://localhost:18789/?token=<你的token>
 3. 发送测试消息
 
 **提示**：建议使用专用手机号，或启用 `selfChatMode`。
-
-#### Telegram
-
-1. 创建 Bot：与 [@BotFather](https://t.me/botfather) 对话
-   ```
-   /newbot
-   选择名称：My Clawdbot
-   选择用户名：my_clawdbot_bot
-   ```
-2. 复制 Bot Token（格式：`123456:ABC-DEF...`）
-3. 在 Web UI 配置 Telegram channel
-4. 测试：向你的 bot 发送 `/start`
 
 #### Discord
 
@@ -171,20 +181,6 @@ http://localhost:18789/?token=<你的token>
 3. 安装 App 到工作区
 4. 在 Web UI 配置 Slack channel
 5. 测试：邀请 bot 到频道并 @它
-
-#### 微信 / WeChat
-
-> **重要说明**：Clawdbot **不支持微信**，因为微信的 API 封闭且限制机器人访问。
-
-**中国用户的替代方案**：
-- 使用 **WhatsApp**（需要 VPN）
-- 使用 **Telegram**（需要代理）
-- 直接使用 **Web UI**（通过 SSM 端口转发访问）
-
-如果确实需要微信集成，可以考虑：
-- 使用企业微信 API（需要企业账号）
-- 自建微信桥接（使用第三方框架，非官方支持）
-- 使用 Web UI 作为主要交互方式
 
 ### 使用 Clawdbot
 
