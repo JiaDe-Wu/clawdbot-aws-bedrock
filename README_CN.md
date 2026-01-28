@@ -50,11 +50,22 @@
 
 | 区域 | 部署 |
 |------|------|
-| **美国西部（俄勒冈）** | [![Launch Stack](https://s3.amazonaws.com/cloudformation-examples/cloudformation-launch-stack.png)](https://console.aws.amazon.com/cloudformation/home?region=us-west-2#/stacks/create/review?stackName=clawdbot-bedrock&templateURL=https://sharefile-jiade.s3.cn-northwest-1.amazonaws.com.cn/clawdbot-bedrock.yaml) |
 | **美国东部（弗吉尼亚）** | [![Launch Stack](https://s3.amazonaws.com/cloudformation-examples/cloudformation-launch-stack.png)](https://console.aws.amazon.com/cloudformation/home?region=us-east-1#/stacks/create/review?stackName=clawdbot-bedrock&templateURL=https://sharefile-jiade.s3.cn-northwest-1.amazonaws.com.cn/clawdbot-bedrock.yaml) |
+| **美国东部（俄亥俄）** | [![Launch Stack](https://s3.amazonaws.com/cloudformation-examples/cloudformation-launch-stack.png)](https://console.aws.amazon.com/cloudformation/home?region=us-east-2#/stacks/create/review?stackName=clawdbot-bedrock&templateURL=https://sharefile-jiade.s3.cn-northwest-1.amazonaws.com.cn/clawdbot-bedrock.yaml) |
+| **美国西部（俄勒冈）** | [![Launch Stack](https://s3.amazonaws.com/cloudformation-examples/cloudformation-launch-stack.png)](https://console.aws.amazon.com/cloudformation/home?region=us-west-2#/stacks/create/review?stackName=clawdbot-bedrock&templateURL=https://sharefile-jiade.s3.cn-northwest-1.amazonaws.com.cn/clawdbot-bedrock.yaml) |
 | **欧洲（爱尔兰）** | [![Launch Stack](https://s3.amazonaws.com/cloudformation-examples/cloudformation-launch-stack.png)](https://console.aws.amazon.com/cloudformation/home?region=eu-west-1#/stacks/create/review?stackName=clawdbot-bedrock&templateURL=https://sharefile-jiade.s3.cn-northwest-1.amazonaws.com.cn/clawdbot-bedrock.yaml) |
+| **欧洲（法兰克福）** | [![Launch Stack](https://s3.amazonaws.com/cloudformation-examples/cloudformation-launch-stack.png)](https://console.aws.amazon.com/cloudformation/home?region=eu-central-1#/stacks/create/review?stackName=clawdbot-bedrock&templateURL=https://sharefile-jiade.s3.cn-northwest-1.amazonaws.com.cn/clawdbot-bedrock.yaml) |
 | **亚太（东京）** | [![Launch Stack](https://s3.amazonaws.com/cloudformation-examples/cloudformation-launch-stack.png)](https://console.aws.amazon.com/cloudformation/home?region=ap-northeast-1#/stacks/create/review?stackName=clawdbot-bedrock&templateURL=https://sharefile-jiade.s3.cn-northwest-1.amazonaws.com.cn/clawdbot-bedrock.yaml) |
-| **中国区域** 🇨🇳 | 敬请期待（Bedrock 尚未开放） |
+| **亚太（新加坡）** | [![Launch Stack](https://s3.amazonaws.com/cloudformation-examples/cloudformation-launch-stack.png)](https://console.aws.amazon.com/cloudformation/home?region=ap-southeast-1#/stacks/create/review?stackName=clawdbot-bedrock&templateURL=https://sharefile-jiade.s3.cn-northwest-1.amazonaws.com.cn/clawdbot-bedrock.yaml) |
+| **亚太（悉尼）** | [![Launch Stack](https://s3.amazonaws.com/cloudformation-examples/cloudformation-launch-stack.png)](https://console.aws.amazon.com/cloudformation/home?region=ap-southeast-2#/stacks/create/review?stackName=clawdbot-bedrock&templateURL=https://sharefile-jiade.s3.cn-northwest-1.amazonaws.com.cn/clawdbot-bedrock.yaml) |
+
+> **支持区域**：Claude Sonnet 4.5 在全球 30+ 个区域可用，包括美国、欧洲、亚太、加拿大、南美、中东和非洲。[查看完整列表](https://docs.aws.amazon.com/bedrock/latest/userguide/models-supported.html)
+
+> **注意**：
+> - **中国区域（北京、宁夏）占不支持部署此方案
+> - 部署前在 [Bedrock Console](https://console.aws.amazon.com/bedrock/) 启用模型
+> - 在目标区域创建 EC2 密钥对
+
 
 **部署后（约8分钟），查看CloudFormation输出标签：**
 
@@ -65,13 +76,6 @@
 
 ![CloudFormation Outputs](images/20260128-105244.jpeg)
 ![Clawdbot Web UI](images/20260128-105059.jpg)
-
-
-
-> **注意**：
-> - **中国区域（北京、宁夏）不支持 Bedrock**，无法部署此方案
-> - 部署前在 [Bedrock Console](https://console.aws.amazon.com/bedrock/) 启用模型
-> - 在目标区域创建 EC2 密钥对
 
 ### 手动部署
 
@@ -596,4 +600,6 @@ Clawdbot 本身有独立的许可证。参见 [Clawdbot License](https://github.
 
 ---
 
-**在你控制的 AWS 基础设施上部署个人 AI 助手** 🦞
+**Built by builder + Kiro for AWS customers and partners**
+
+在你控制的 AWS 基础设施上部署个人 AI 助手 🦞
