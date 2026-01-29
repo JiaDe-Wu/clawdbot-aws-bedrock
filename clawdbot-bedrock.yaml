@@ -15,31 +15,42 @@ Metadata:
         Parameters:
           - CreateVPCEndpoints
           - AllowedSSHCIDR
+      - Label:
+          default: "Advanced Configuration"
+        Parameters:
+          - EnableSandbox
+          - AutoEnableBedrock
 
 Parameters:
   ClawdbotModel:
     Type: String
-    Default: "global.anthropic.claude-sonnet-4-5-20250929-v1:0"
-    Description: "Bedrock model ID - Global CRIS profiles support 30+ regions worldwide"
+    Default: "anthropic.claude-sonnet-4-5-20250929-v1:0"
+    Description: "Bedrock model ID - Claude Sonnet 4.5 (best performance)"
     AllowedValues:
-      - "global.anthropic.claude-sonnet-4-5-20250929-v1:0"
-      - "global.anthropic.claude-opus-4-5-20251101-v1:0"
-      - "global.anthropic.claude-haiku-4-5-20251001-v1:0"
-      - "global.anthropic.claude-sonnet-4-20250514-v1:0"
-      - "global.amazon.nova-2-lite-v1:0"
-      - "us.amazon.nova-pro-v1:0"
-      - "us.deepseek.r1-v1:0"
+      - "anthropic.claude-sonnet-4-5-20250929-v1:0"
+      - "anthropic.claude-sonnet-4-20250514-v1:0"
       - "anthropic.claude-3-5-sonnet-20241022-v2:0"
+      - "amazon.nova-2-sonic-v1:0"
+      - "qwen.qwen3-vl-235b-a22b"
+      - "openai.gpt-oss-safeguard-120b"
+      - "google.gemma-3-27b-it"
+      - "minimax.minimax-m2"
 
   InstanceType:
     Type: String
-    Default: "t3.medium"
+    Default: "t4g.medium"
     AllowedValues:
       - "t3.small"
       - "t3.medium"
       - "t3.large"
       - "t3.xlarge"
+      - "t4g.small"
+      - "t4g.medium"
+      - "t4g.large"
+      - "t4g.xlarge"
       - "c5.xlarge"
+      - "c6g.large"
+      - "c6g.xlarge"
 
   KeyPairName:
     Type: AWS::EC2::KeyPair::KeyName
@@ -65,9 +76,24 @@ Parameters:
       - "true"
       - "false"
 
+  AutoEnableBedrock:
+    Type: String
+    Default: "false"
+    Description: "Automatically run pre-check and attempt to enable Bedrock models"
+    AllowedValues:
+      - "true"
+      - "false"
+
 Conditions:
   CreateEndpoints: !Equals [!Ref CreateVPCEndpoints, "true"]
   AllowSSH: !Not [!Equals [!Ref AllowedSSHCIDR, "127.0.0.1/32"]]
+  RunPrecheck: !Equals [!Ref AutoEnableBedrock, "true"]
+  UseARM64: !Or
+    - !Equals [!Select [0, !Split [".", !Ref InstanceType]], "t4g"]
+    - !Equals [!Select [0, !Split [".", !Ref InstanceType]], "c6g"]
+    - !Equals [!Select [0, !Split [".", !Ref InstanceType]], "c7g"]
+    - !Equals [!Select [0, !Split [".", !Ref InstanceType]], "m6g"]
+    - !Equals [!Select [0, !Split [".", !Ref InstanceType]], "r6g"]
 
 Mappings:
   RegionMap:
@@ -102,6 +128,196 @@ Resources:
       Handle: !Ref ClawdbotWaitHandle
       Timeout: '900'
       Count: 1
+
+  # ==================== Pre-Check Lambda ====================
+  PrecheckLambdaRole:
+    Type: AWS::IAM::Role
+    Condition: RunPrecheck
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: 'sts:AssumeRole'
+      ManagedPolicyArns:
+        - 'arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole'
+      Policies:
+        - PolicyName: BedrockPrecheckPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'bedrock:ListFoundationModels'
+                  - 'bedrock:GetFoundationModel'
+                  - 'bedrock:InvokeModel'
+                  - 'bedrock-runtime:InvokeModel'
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - 'ec2:DescribeVpcEndpoints'
+                  - 'servicequotas:GetServiceQuota'
+                  - 'sts:GetCallerIdentity'
+                Resource: '*'
+
+  PrecheckLambdaFunction:
+    Type: AWS::Lambda::Function
+    Condition: RunPrecheck
+    DependsOn: PrecheckLambdaRole
+    Properties:
+      FunctionName: !Sub '${AWS::StackName}-bedrock-precheck'
+      Runtime: python3.12
+      Handler: index.lambda_handler
+      Role: !GetAtt PrecheckLambdaRole.Arn
+      Timeout: 300
+      Code:
+        ZipFile: |
+          import json
+          import boto3
+          import logging
+          import urllib3
+          from botocore.exceptions import ClientError
+          
+          logger = logging.getLogger()
+          logger.setLevel(logging.INFO)
+          http = urllib3.PoolManager()
+          
+          def send_response(event, context, status, data):
+              """Send response to CloudFormation"""
+              response_body = {
+                  'Status': status,
+                  'Reason': f'See CloudWatch Log Stream: {context.log_stream_name}',
+                  'PhysicalResourceId': context.log_stream_name,
+                  'StackId': event['StackId'],
+                  'RequestId': event['RequestId'],
+                  'LogicalResourceId': event['LogicalResourceId'],
+                  'Data': data
+              }
+              
+              json_response = json.dumps(response_body)
+              headers = {'content-type': '', 'content-length': str(len(json_response))}
+              
+              try:
+                  http.request('PUT', event['ResponseURL'], body=json_response, headers=headers)
+                  logger.info(f"Response sent successfully: {status}")
+              except Exception as e:
+                  logger.error(f"Failed to send response: {e}")
+          
+          def lambda_handler(event, context):
+              logger.info(f"Received event: {json.dumps(event)}")
+              
+              try:
+                  request_type = event.get('RequestType')
+                  
+                  # Handle Delete - no action needed
+                  if request_type == 'Delete':
+                      send_response(event, context, 'SUCCESS', {'Message': 'Delete completed'})
+                      return
+                  
+                  # Get model ID from properties
+                  model_id = event.get('ResourceProperties', {}).get('ModelId', 
+                              'anthropic.claude-3-5-sonnet-20241022-v2:0')
+                  
+                  bedrock = boto3.client('bedrock')
+                  bedrock_runtime = boto3.client('bedrock-runtime')
+                  
+                  results = {'checks_passed': 0, 'model_id': model_id}
+                  
+                  # Check 1: Bedrock service
+                  logger.info("Check 1/3: Bedrock service availability")
+                  try:
+                      bedrock.list_foundation_models(byProvider='Anthropic')
+                      results['bedrock_available'] = True
+                      results['checks_passed'] += 1
+                      logger.info("✓ Bedrock service available")
+                  except ClientError as e:
+                      logger.error(f"✗ Bedrock check failed: {e}")
+                      send_response(event, context, 'FAILED', 
+                                  {'Error': 'Bedrock not available in this region'})
+                      return
+                  
+                  # Check 2: Model access
+                  logger.info(f"Check 2/3: Model access for {model_id}")
+                  try:
+                      models_response = bedrock.list_foundation_models(byProvider='Anthropic')
+                      available_models = {m['modelId']: m for m in models_response.get('modelSummaries', [])}
+                      
+                      logger.info(f"Available Anthropic models: {list(available_models.keys())}")
+                      
+                      if model_id not in available_models:
+                          logger.error(f"✗ Model {model_id} not found")
+                          logger.error(f"Available models: {list(available_models.keys())}")
+                          send_response(event, context, 'FAILED',
+                                      {'Error': f'Model {model_id} not found in this region. Available: {", ".join(list(available_models.keys())[:5])}'})
+                          return
+                      
+                      model_status = available_models[model_id].get('modelLifecycle', {}).get('status')
+                      
+                      if model_status != 'ACTIVE':
+                          logger.error(f"✗ Model status: {model_status}")
+                          send_response(event, context, 'FAILED',
+                                      {'Error': f'Model not enabled. Go to Bedrock Console and enable {model_id}'})
+                          return
+                      
+                      results['model_status'] = model_status
+                      results['checks_passed'] += 1
+                      logger.info(f"✓ Model {model_id} is ACTIVE")
+                      
+                  except ClientError as e:
+                      logger.error(f"✗ Model check failed: {e}")
+                      send_response(event, context, 'FAILED',
+                                  {'Error': f'Failed to check model: {str(e)}'})
+                      return
+                  
+                  # Check 3: Test invocation
+                  logger.info("Check 3/3: Testing model invocation")
+                  try:
+                      test_body = json.dumps({
+                          "anthropic_version": "bedrock-2023-05-31",
+                          "max_tokens": 10,
+                          "messages": [{"role": "user", "content": "test"}]
+                      })
+                      
+                      response = bedrock_runtime.invoke_model(
+                          modelId=model_id,
+                          body=test_body
+                      )
+                      
+                      results['model_invocation'] = 'SUCCESS'
+                      results['checks_passed'] += 1
+                      logger.info("✓ Model invocation successful")
+                      
+                  except ClientError as e:
+                      logger.error(f"✗ Invocation failed: {e}")
+                      send_response(event, context, 'FAILED',
+                                  {'Error': f'Model invocation failed. Check IAM permissions.'})
+                      return
+                  
+                  # All checks passed
+                  response_data = {
+                      'Message': 'All pre-checks passed',
+                      'ChecksPassed': results['checks_passed'],
+                      'ModelId': model_id,
+                      'ModelStatus': model_status
+                  }
+                  
+                  logger.info(f"✓ All checks passed: {response_data}")
+                  send_response(event, context, 'SUCCESS', response_data)
+                  
+              except Exception as e:
+                  logger.error(f"Unexpected error: {str(e)}", exc_info=True)
+                  send_response(event, context, 'FAILED',
+                              {'Error': f'Unexpected error: {str(e)}'})
+
+  PrecheckInvocation:
+    Type: Custom::PrecheckInvocation
+    Condition: RunPrecheck
+    DependsOn: PrecheckLambdaFunction
+    Properties:
+      ServiceToken: !GetAtt PrecheckLambdaFunction.Arn
+      ModelId: !Ref ClawdbotModel
 
   # ==================== VPC and Network ====================
   ClawdbotVPC:
@@ -304,7 +520,10 @@ Resources:
   ClawdbotInstance:
     Type: AWS::EC2::Instance
     Properties:
-      ImageId: !Sub '{{resolve:ssm:/aws/service/canonical/ubuntu/server/24.04/stable/current/amd64/hvm/ebs-gp3/ami-id}}'
+      ImageId: !If
+        - UseARM64
+        - !Sub '{{resolve:ssm:/aws/service/canonical/ubuntu/server/24.04/stable/current/arm64/hvm/ebs-gp3/ami-id}}'
+        - !Sub '{{resolve:ssm:/aws/service/canonical/ubuntu/server/24.04/stable/current/amd64/hvm/ebs-gp3/ami-id}}'
       InstanceType: !Ref InstanceType
       KeyName: !Ref KeyPairName
       IamInstanceProfile: !Ref ClawdbotInstanceProfile
@@ -342,7 +561,12 @@ Resources:
           
           # Install AWS CLI v2
           echo "[2/9] Installing AWS CLI..."
-          curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+          ARCH=$(uname -m)
+          if [ "$ARCH" = "aarch64" ]; then
+            curl "https://awscli.amazonaws.com/awscli-exe-linux-aarch64.zip" -o "awscliv2.zip"
+          else
+            curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+          fi
           unzip -q awscliv2.zip
           ./aws/install
           rm -rf aws awscliv2.zip
@@ -450,7 +674,7 @@ Resources:
           INSTANCE_ID=${!INSTANCE_ID:-"unknown"}
           
           # Create Bedrock configuration file
-          sudo -u ubuntu cat > /home/ubuntu/.clawdbot/clawdbot.json << 'JSONEOF'
+          sudo -u ubuntu cat > /home/ubuntu/.clawdbot/clawdbot.json << JSONEOF
           {
             "gateway": {
               "mode": "local",
@@ -462,18 +686,18 @@ Resources:
               },
               "auth": {
                 "mode": "token",
-                "token": "GATEWAY_TOKEN_PLACEHOLDER"
+                "token": "$GATEWAY_TOKEN"
               }
             },
             "models": {
               "providers": {
                 "amazon-bedrock": {
-                  "baseUrl": "https://bedrock-runtime.REGION_PLACEHOLDER.amazonaws.com",
+                  "baseUrl": "https://bedrock-runtime.$AWS_REGION.amazonaws.com",
                   "api": "bedrock-converse-stream",
                   "auth": "aws-sdk",
                   "models": [
                     {
-                      "id": "MODEL_ID_PLACEHOLDER",
+                      "id": "${ClawdbotModel}",
                       "name": "Bedrock Model",
                       "input": ["text", "image"],
                       "contextWindow": 200000,
@@ -486,17 +710,12 @@ Resources:
             "agents": {
               "defaults": {
                 "model": {
-                  "primary": "amazon-bedrock/MODEL_ID_PLACEHOLDER"
+                  "primary": "amazon-bedrock/${ClawdbotModel}"
                 }
               }
             }
           }
           JSONEOF
-          
-          # Replace placeholders
-          sed -i "s/GATEWAY_TOKEN_PLACEHOLDER/$GATEWAY_TOKEN/g" /home/ubuntu/.clawdbot/clawdbot.json
-          sed -i "s/REGION_PLACEHOLDER/$AWS_REGION/g" /home/ubuntu/.clawdbot/clawdbot.json
-          sed -i "s|MODEL_ID_PLACEHOLDER|${ClawdbotModel}|g" /home/ubuntu/.clawdbot/clawdbot.json
           
           # Install daemon (sandbox config removed - not supported)
           sudo -H -u ubuntu XDG_RUNTIME_DIR=/run/user/1000 bash -c '
