@@ -24,17 +24,17 @@ Metadata:
 Parameters:
   ClawdbotModel:
     Type: String
-    Default: "us.anthropic.claude-sonnet-4-5-20250929-v1:0"
-    Description: "Bedrock model ID - Claude Sonnet 4.5 (best performance)"
+    Default: "global.anthropic.claude-sonnet-4-5-20250929-v1:0"
+    Description: "Bedrock model ID - Global CRIS profiles support 30+ regions worldwide"
     AllowedValues:
-      - "us.anthropic.claude-sonnet-4-5-20250929-v1:0"
-      - "us.anthropic.claude-sonnet-4-20250514-v1:0"
+      - "global.anthropic.claude-sonnet-4-5-20250929-v1:0"
+      - "global.anthropic.claude-opus-4-5-20251101-v1:0"
+      - "global.anthropic.claude-haiku-4-5-20251001-v1:0"
+      - "global.anthropic.claude-sonnet-4-20250514-v1:0"
+      - "global.amazon.nova-2-lite-v1:0"
+      - "us.amazon.nova-pro-v1:0"
+      - "us.deepseek.r1-v1:0"
       - "anthropic.claude-3-5-sonnet-20241022-v2:0"
-      - "amazon.nova-2-sonic-v1:0"
-      - "qwen.qwen3-vl-235b-a22b"
-      - "openai.gpt-oss-safeguard-120b"
-      - "google.gemma-3-27b-it"
-      - "minimax.minimax-m2"
 
   InstanceType:
     Type: String
